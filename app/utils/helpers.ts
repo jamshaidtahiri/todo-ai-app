@@ -574,4 +574,149 @@ function parseCommandRuleBased(text: string): CommandResult {
   
   // If no command matched
   return { type: 'unknown', confidence: 0 };
+}
+
+/**
+ * Analyzes tasks to find potential recurring patterns based on text similarity and creation dates
+ */
+export function findRecurringSuggestions(tasks: any[]): { task: any, pattern: string }[] {
+  if (tasks.length < 5) return []; // Need enough data to detect patterns
+  
+  const suggestions: { task: any, pattern: string }[] = [];
+  const recentTasks = [...tasks].sort((a, b) => b.createdAt - a.createdAt);
+  
+  // Group similar tasks by text similarity
+  const taskGroups: {[key: string]: any[]} = {};
+  
+  recentTasks.forEach(task => {
+    // Skip already recurring tasks
+    if (task.recurring) return;
+    
+    // Generate a simplified version of the task text for comparison
+    const simplifiedText = task.text.toLowerCase()
+      .replace(/\d+/g, 'X') // Replace numbers with X to detect patterns like "Pay rent - January" and "Pay rent - February"
+      .replace(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)\b/gi, 'MONTH')
+      .replace(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/gi, 'DAY')
+      .trim();
+    
+    if (!taskGroups[simplifiedText]) {
+      taskGroups[simplifiedText] = [];
+    }
+    taskGroups[simplifiedText].push(task);
+  });
+  
+  // Analyze each group for time-based patterns
+  Object.entries(taskGroups).forEach(([key, groupTasks]) => {
+    if (groupTasks.length < 2) return; // Need at least 2 tasks to detect a pattern
+    
+    // Sort by creation date
+    groupTasks.sort((a, b) => a.createdAt - b.createdAt);
+    
+    // Check for daily pattern
+    const dailyPattern = detectDailyPattern(groupTasks);
+    if (dailyPattern) {
+      suggestions.push({
+        task: groupTasks[groupTasks.length - 1],
+        pattern: 'daily'
+      });
+      return;
+    }
+    
+    // Check for weekly pattern
+    const weeklyPattern = detectWeeklyPattern(groupTasks);
+    if (weeklyPattern) {
+      suggestions.push({
+        task: groupTasks[groupTasks.length - 1],
+        pattern: 'weekly'
+      });
+      return;
+    }
+    
+    // Check for monthly pattern
+    const monthlyPattern = detectMonthlyPattern(groupTasks);
+    if (monthlyPattern) {
+      suggestions.push({
+        task: groupTasks[groupTasks.length - 1],
+        pattern: 'monthly'
+      });
+      return;
+    }
+  });
+  
+  return suggestions;
+}
+
+/**
+ * Detect if tasks follow a daily pattern
+ */
+function detectDailyPattern(tasks: any[]): boolean {
+  if (tasks.length < 3) return false; // Need at least 3 daily tasks to be confident
+  
+  let isDailyPattern = true;
+  for (let i = 1; i < tasks.length; i++) {
+    const prevDate = new Date(tasks[i-1].createdAt);
+    const currDate = new Date(tasks[i].createdAt);
+    
+    // Check if tasks are 1-2 days apart (allowing for some flexibility)
+    const dayDiff = Math.abs(
+      (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (dayDiff < 0.5 || dayDiff > 2) {
+      isDailyPattern = false;
+      break;
+    }
+  }
+  
+  return isDailyPattern;
+}
+
+/**
+ * Detect if tasks follow a weekly pattern
+ */
+function detectWeeklyPattern(tasks: any[]): boolean {
+  if (tasks.length < 2) return false;
+  
+  let isWeeklyPattern = true;
+  for (let i = 1; i < tasks.length; i++) {
+    const prevDate = new Date(tasks[i-1].createdAt);
+    const currDate = new Date(tasks[i].createdAt);
+    
+    // Check if tasks are 6-8 days apart (allowing for some flexibility)
+    const dayDiff = Math.abs(
+      (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (dayDiff < 6 || dayDiff > 8) {
+      isWeeklyPattern = false;
+      break;
+    }
+  }
+  
+  return isWeeklyPattern;
+}
+
+/**
+ * Detect if tasks follow a monthly pattern
+ */
+function detectMonthlyPattern(tasks: any[]): boolean {
+  if (tasks.length < 2) return false;
+  
+  let isMonthlyPattern = true;
+  for (let i = 1; i < tasks.length; i++) {
+    const prevDate = new Date(tasks[i-1].createdAt);
+    const currDate = new Date(tasks[i].createdAt);
+    
+    // Check if tasks are 28-32 days apart (allowing for month variation)
+    const dayDiff = Math.abs(
+      (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    if (dayDiff < 28 || dayDiff > 32) {
+      isMonthlyPattern = false;
+      break;
+    }
+  }
+  
+  return isMonthlyPattern;
 } 
