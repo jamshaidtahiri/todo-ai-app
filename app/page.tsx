@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { classifyTask } from './utils/cohere';
+import { classifyTask, classifyCommand, generateTaskSuggestions } from './utils/cohere';
 import { v4 as uuidv4 } from 'uuid';
 import Task from './components/Task';
 import CommandInput from './components/CommandInput';
@@ -28,6 +28,8 @@ export default function Home() {
   const [stats, setStats] = useState({ total: 0, completed: 0 });
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [taskSuggestions, setTaskSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('tasks');
@@ -40,6 +42,11 @@ export default function Home() {
       total: tasks.length,
       completed: tasks.filter(t => t.done).length
     });
+    
+    // Generate task suggestions when tasks change
+    if (tasks.length >= 3) {
+      generateSuggestions();
+    }
   }, [tasks]);
 
   useEffect(() => {
@@ -48,6 +55,20 @@ export default function Home() {
       setShowHelp(true);
     }
   }, [input]);
+  
+  // Generate task suggestions using the LLM
+  const generateSuggestions = async () => {
+    if (tasks.length < 3) return;
+    
+    // Only use the most recent 5 tasks for context
+    const recentTasks = [...tasks]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 5)
+      .map(t => t.text);
+      
+    const suggestions = await generateTaskSuggestions(recentTasks);
+    setTaskSuggestions(suggestions);
+  };
 
   const showFeedback = (message: string) => {
     setFeedbackMessage(message);
@@ -70,6 +91,7 @@ export default function Home() {
       }]);
       setInput('');
       showFeedback(`Added task: ${text}`);
+      setShowSuggestions(false);
     } catch (error) {
       console.error('Error adding task:', error);
       showFeedback('Error adding task');
@@ -158,6 +180,25 @@ export default function Home() {
       showFeedback(`No matching tasks found for "${searchText}"`);
     }
   };
+  
+  const updateTaskPriority = (searchText: string, priority: 'high' | 'medium' | 'low') => {
+    const lowerSearchText = searchText.toLowerCase();
+    let modifiedCount = 0;
+    
+    setTasks(tasks.map(task => {
+      if (task.text.toLowerCase().includes(lowerSearchText)) {
+        modifiedCount++;
+        return { ...task, priority };
+      }
+      return task;
+    }));
+    
+    if (modifiedCount > 0) {
+      showFeedback(`Set priority to "${priority}" for ${modifiedCount} task(s)`);
+    } else {
+      showFeedback(`No matching tasks found for "${searchText}"`);
+    }
+  };
 
   // Batch operations
   const handleBatchComplete = () => {
@@ -225,8 +266,44 @@ export default function Home() {
     setIsLoading(true);
     
     try {
+      // Try rule-based parsing first (fast and accurate for standard commands)
       const command = parseCommand(input);
       
+      // If the rule-based parser couldn't determine the command type with confidence,
+      // use AI to classify the command and extract entities
+      if (command.type === 'unknown' && command.confidence === 0) {
+        const aiClassification = await classifyCommand(input);
+        
+        if (aiClassification.intent === 'add_task') {
+          command.type = 'add';
+          command.taskText = aiClassification.entities.taskText || input;
+          command.tag = aiClassification.entities.tag;
+          command.priority = aiClassification.entities.priority as 'high' | 'medium' | 'low';
+        } else if (aiClassification.intent === 'complete_task') {
+          command.type = 'tick';
+          command.searchTerm = aiClassification.entities.searchTerm;
+        } else if (aiClassification.intent === 'delete_task') {
+          command.type = 'delete';
+          command.searchTerm = aiClassification.entities.searchTerm;
+        } else if (aiClassification.intent === 'change_tag') {
+          command.type = 'tag';
+          command.searchTerm = aiClassification.entities.searchTerm;
+          command.tag = aiClassification.entities.tag;
+        } else if (aiClassification.intent === 'set_priority') {
+          command.type = 'priority';
+          command.searchTerm = aiClassification.entities.searchTerm;
+          command.priority = aiClassification.entities.priority as 'high' | 'medium' | 'low';
+        } else if (aiClassification.intent === 'filter_tasks') {
+          command.type = 'filter';
+          command.tag = aiClassification.entities.tag;
+        } else if (aiClassification.intent === 'help') {
+          command.type = 'help';
+        }
+        
+        command.confidence = aiClassification.confidence;
+      }
+      
+      // Execute the command based on its type
       switch (command.type) {
         case 'add':
           if (command.taskText) {
@@ -252,14 +329,32 @@ export default function Home() {
           }
           break;
           
+        case 'priority':
+          if (command.searchTerm && command.priority) {
+            updateTaskPriority(command.searchTerm, command.priority);
+          }
+          break;
+          
+        case 'filter':
+          if (command.tag) {
+            setFilterTag(command.tag);
+            showFeedback(`Showing tasks with tag: ${command.tag}`);
+          }
+          break;
+          
         case 'help':
           showHelpMessage();
           break;
           
         case 'unknown':
         default:
-          // If no command matches, try to add it as a regular task
-          await addTask(input);
+          // If confidence is really low, maybe the user is not trying to execute a command
+          // but just wants to add a task with this text
+          if (command.confidence && command.confidence < 0.5) {
+            await addTask(input);
+          } else {
+            showFeedback("I'm not sure what you want to do. Try 'help' for a list of commands.");
+          }
           break;
       }
       
@@ -275,6 +370,10 @@ export default function Home() {
   const handleCommandSelect = (command: string) => {
     setInput(command);
     setShowHelp(false);
+  };
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    addTask(suggestion);
   };
 
   const getAllTags = () => {
@@ -315,14 +414,13 @@ export default function Home() {
         />
 
         <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-          <p className="text-sm text-gray-600 mb-2">Try these commands:</p>
+          <p className="text-sm text-gray-600 mb-2">Try these natural commands:</p>
           <div className="flex flex-wrap gap-2 text-xs">
-            <span className="bg-gray-100 px-2 py-1 rounded">add buy milk #errand</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">add workout as fitness</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">add call mom !high</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">tick all milk</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">delete report</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">tag workout as fitness</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">I need to buy milk</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">Complete the grocery task</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">Delete all workout tasks</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">Make dentist appointment high priority</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">Show me all work tasks</span>
           </div>
         </div>
 
@@ -367,6 +465,39 @@ export default function Home() {
                 ? "No tasks yet. Add one to get started!" 
                 : "No tasks match the current filter."}
             </p>
+          </div>
+        )}
+        
+        {/* Task Suggestions Section */}
+        {taskSuggestions.length > 0 && (
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-medium text-gray-700">Suggestions based on your tasks</h2>
+              <button 
+                onClick={() => setShowSuggestions(!showSuggestions)}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                {showSuggestions ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            
+            {showSuggestions && (
+              <div className="bg-white rounded-lg shadow-sm p-4 mb-4 animate-fade-in">
+                <ul className="space-y-2">
+                  {taskSuggestions.map((suggestion, index) => (
+                    <li key={index} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded">
+                      <span>{suggestion}</span>
+                      <button 
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                      >
+                        Add
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </main>
