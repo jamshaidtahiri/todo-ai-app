@@ -18,6 +18,27 @@ type Task = {
   tag: string;
   createdAt: number;
   priority?: 'high' | 'medium' | 'low';
+  status: 'pending' | 'completed' | 'archived';
+  dueDate?: number; // timestamp for due date
+  notes?: string;
+  subtasks?: {
+    id: string;
+    text: string;
+    done: boolean;
+  }[];
+  recurring?: {
+    type: 'daily' | 'weekly' | 'monthly' | 'custom';
+    interval: number; // every X days/weeks/months
+    daysOfWeek?: number[]; // for weekly: 0=Sunday, 1=Monday, etc.
+    endDate?: number; // optional end date for recurring tasks
+  };
+  reminders?: {
+    id: string;
+    time: number; // timestamp
+    notified: boolean;
+    type: 'absolute' | 'relative'; // absolute time or relative to due date
+  }[];
+  project?: string; // For grouping tasks by project
 };
 
 export default function Home() {
@@ -30,14 +51,31 @@ export default function Home() {
   const [showHelp, setShowHelp] = useState(false);
   const [taskSuggestions, setTaskSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [sortCriteria, setSortCriteria] = useState<'priority' | 'dueDate' | 'createdAt' | 'alphabetical'>('priority');
+  const [darkMode, setDarkMode] = useState(false);
+  const [projects, setProjects] = useState<string[]>([]);
+  const [activeProject, setActiveProject] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('tasks');
     if (stored) setTasks(JSON.parse(stored));
+    
+    const storedProjects = localStorage.getItem('projects');
+    if (storedProjects) setProjects(JSON.parse(storedProjects));
+    
+    const storedDarkMode = localStorage.getItem('darkMode');
+    if (storedDarkMode) setDarkMode(storedDarkMode === 'true');
+    
+    const storedSortCriteria = localStorage.getItem('sortCriteria');
+    if (storedSortCriteria) setSortCriteria(storedSortCriteria as any);
   }, []);
 
   useEffect(() => {
     localStorage.setItem('tasks', JSON.stringify(tasks));
+    localStorage.setItem('projects', JSON.stringify(projects));
+    localStorage.setItem('darkMode', darkMode.toString());
+    localStorage.setItem('sortCriteria', sortCriteria);
+    
     setStats({
       total: tasks.length,
       completed: tasks.filter(t => t.done).length
@@ -47,7 +85,14 @@ export default function Home() {
     if (tasks.length >= 3) {
       generateSuggestions();
     }
-  }, [tasks]);
+    
+    // Update document theme
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [tasks, projects, darkMode, sortCriteria]);
 
   useEffect(() => {
     // Handle showing help when input is "help"
@@ -75,7 +120,27 @@ export default function Home() {
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
 
-  const addTask = async (text: string, providedTag?: string, priority?: 'high' | 'medium' | 'low') => {
+  const addTask = async (
+    text: string, 
+    providedTag?: string, 
+    priority?: 'high' | 'medium' | 'low',
+    dueDate?: number,
+    notes?: string,
+    subtasks?: { id: string; text: string; done: boolean }[],
+    project?: string,
+    recurring?: {
+      type: 'daily' | 'weekly' | 'monthly' | 'custom';
+      interval: number;
+      daysOfWeek?: number[];
+      endDate?: number;
+    },
+    reminders?: {
+      id: string;
+      time: number;
+      notified: boolean;
+      type: 'absolute' | 'relative';
+    }[]
+  ) => {
     if (!text.trim()) return;
     setIsLoading(true);
     try {
@@ -87,7 +152,14 @@ export default function Home() {
         done: false, 
         tag,
         createdAt: Date.now(),
-        priority
+        priority,
+        status: 'pending',
+        dueDate,
+        notes,
+        subtasks,
+        project,
+        recurring,
+        reminders
       }]);
       setInput('');
       showFeedback(`Added task: ${text}`);
@@ -111,6 +183,247 @@ export default function Home() {
       showFeedback(`Deleted task: ${taskToDelete.text}`);
     }
   };
+
+  const handleTaskUpdate = (id: string, updates: Partial<Task>) => {
+    setTasks(tasks.map(task => 
+      task.id === id ? { ...task, ...updates } : task
+    ));
+  };
+  
+  // Set due date for a task
+  const handleDueDate = (searchText: string, dueDate: number | undefined) => {
+    let modifiedCount = 0;
+    
+    setTasks(tasks.map(task => {
+      if (task.text.toLowerCase().includes(searchText.toLowerCase())) {
+        modifiedCount++;
+        return { ...task, dueDate };
+      }
+      return task;
+    }));
+    
+    if (modifiedCount > 0) {
+      showFeedback(`Updated due date for ${modifiedCount} task(s)`);
+    } else {
+      showFeedback(`No matching tasks found for "${searchText}"`);
+    }
+    
+    return modifiedCount;
+  };
+  
+  // Set recurring schedule for a task
+  const handleRecurringTask = (
+    searchText: string, 
+    recurringType: 'daily' | 'weekly' | 'monthly' | 'custom',
+    interval: number = 1,
+    daysOfWeek?: number[]
+  ) => {
+    let modifiedCount = 0;
+    
+    setTasks(tasks.map(task => {
+      if (task.text.toLowerCase().includes(searchText.toLowerCase())) {
+        modifiedCount++;
+        return { 
+          ...task, 
+          recurring: {
+            type: recurringType,
+            interval,
+            daysOfWeek,
+            endDate: undefined
+          }
+        };
+      }
+      return task;
+    }));
+    
+    if (modifiedCount > 0) {
+      showFeedback(`Set recurring schedule for ${modifiedCount} task(s)`);
+    } else {
+      showFeedback(`No matching tasks found for "${searchText}"`);
+    }
+    
+    return modifiedCount;
+  };
+  
+  // Change task sorting
+  const handleSort = (criteria: 'priority' | 'dueDate' | 'createdAt' | 'alphabetical') => {
+    setSortCriteria(criteria);
+    showFeedback(`Sorting tasks by ${criteria}`);
+  };
+  
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    showFeedback(`Switched to ${!darkMode ? 'dark' : 'light'} mode`);
+  };
+  
+  // Check for recurring tasks and create new instances if needed
+  useEffect(() => {
+    const now = Date.now();
+    let tasksUpdated = false;
+    
+    const updatedTasks = [...tasks];
+    
+    // Find completed recurring tasks that need to be regenerated
+    tasks.forEach(task => {
+      if (task.recurring && task.done) {
+        // Calculate the next occurrence date
+        let nextDate = undefined;
+        
+        if (task.dueDate) {
+          const dueDate = new Date(task.dueDate);
+          
+          if (task.recurring.type === 'daily') {
+            // Add days based on interval
+            nextDate = new Date(dueDate);
+            nextDate.setDate(nextDate.getDate() + task.recurring.interval);
+          } else if (task.recurring.type === 'weekly') {
+            // Find the next matching day of week
+            nextDate = new Date(dueDate);
+            nextDate.setDate(nextDate.getDate() + (7 * task.recurring.interval));
+            
+            // Adjust to the correct day of week if specified
+            if (task.recurring.daysOfWeek && task.recurring.daysOfWeek.length > 0) {
+              // Find the next available day from the current weekday
+              const currentDayOfWeek = nextDate.getDay();
+              const availableDays = [...task.recurring.daysOfWeek].sort();
+              
+              // Find the next day in the list
+              const nextDayIndex = availableDays.findIndex(day => day > currentDayOfWeek);
+              if (nextDayIndex !== -1) {
+                // Found a day later in the current week
+                const daysToAdd = availableDays[nextDayIndex] - currentDayOfWeek;
+                nextDate.setDate(nextDate.getDate() + daysToAdd);
+              } else {
+                // Move to the first day in the next week
+                const daysToAdd = 7 - currentDayOfWeek + availableDays[0];
+                nextDate.setDate(nextDate.getDate() + daysToAdd);
+              }
+            }
+          } else if (task.recurring.type === 'monthly') {
+            // Add months based on interval
+            nextDate = new Date(dueDate);
+            nextDate.setMonth(nextDate.getMonth() + task.recurring.interval);
+          }
+          
+          // Check if the task should still be recurring (if it has an end date)
+          if (task.recurring.endDate && nextDate && nextDate.getTime() > task.recurring.endDate) {
+            // Don't recreate if we're past the end date
+            nextDate = undefined;
+          }
+        }
+        
+        if (nextDate) {
+          // Create a new instance of the recurring task
+          const newTaskId = uuidv4();
+          
+          // Prepare new reminders if needed
+          let newReminders = undefined;
+          if (task.reminders && task.reminders.length > 0) {
+            newReminders = task.reminders.map(reminder => {
+              if (reminder.type === 'relative' && task.dueDate && nextDate) {
+                // Calculate new relative reminder time based on the time difference
+                const timeDiff = task.dueDate - reminder.time;
+                const newReminderTime = nextDate.getTime() - timeDiff;
+                
+                return {
+                  id: uuidv4(),
+                  time: newReminderTime,
+                  notified: false,
+                  type: 'relative'
+                };
+              } else if (reminder.type === 'absolute') {
+                // Create a new absolute reminder with the same date/time
+                return {
+                  id: uuidv4(),
+                  time: reminder.time,
+                  notified: false,
+                  type: 'absolute'
+                };
+              }
+              
+              // Fallback
+              return {
+                id: uuidv4(),
+                time: reminder.time,
+                notified: false,
+                type: reminder.type
+              };
+            });
+          }
+          
+          // Add new task
+          updatedTasks.push({
+            ...task,
+            id: newTaskId,
+            done: false,
+            status: 'pending',
+            createdAt: now,
+            dueDate: nextDate.getTime(),
+            reminders: newReminders,
+            // Reset subtasks if any
+            subtasks: task.subtasks ? task.subtasks.map(st => ({
+              id: uuidv4(),
+              text: st.text,
+              done: false
+            })) : undefined
+          });
+          
+          tasksUpdated = true;
+        }
+      }
+    });
+    
+    if (tasksUpdated) {
+      setTasks(updatedTasks);
+    }
+  }, [tasks]);
+  
+  // Check for due reminders
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const now = Date.now();
+    let tasksUpdated = false;
+    
+    const updatedTasks = tasks.map(task => {
+      if (task.reminders && task.reminders.length > 0) {
+        const updatedReminders = task.reminders.map(reminder => {
+          if (!reminder.notified && reminder.time <= now) {
+            // Show notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('Task Reminder', {
+                body: `Reminder for: ${task.text}`,
+                icon: '/icon.png'
+              });
+            }
+            
+            return { ...reminder, notified: true };
+          }
+          return reminder;
+        });
+        
+        if (JSON.stringify(updatedReminders) !== JSON.stringify(task.reminders)) {
+          tasksUpdated = true;
+          return { ...task, reminders: updatedReminders };
+        }
+      }
+      return task;
+    });
+    
+    if (tasksUpdated) {
+      setTasks(updatedTasks);
+    }
+  }, [tasks]);
+  
+  // Request notification permissions
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
 
   const tickTasksByText = (searchText: string, tickAll: boolean = false) => {
     const lowerSearchText = searchText.toLowerCase();
@@ -199,318 +512,4 @@ export default function Home() {
       showFeedback(`No matching tasks found for "${searchText}"`);
     }
   };
-
-  // Batch operations
-  const handleBatchComplete = () => {
-    const tasksToUpdate = filterTag ? tasks.filter(t => t.tag === filterTag) : tasks;
-    const incompleteCount = tasksToUpdate.filter(t => !t.done).length;
-    
-    if (incompleteCount > 0) {
-      setTasks(tasks.map(task => {
-        if (filterTag && task.tag !== filterTag) return task;
-        return { ...task, done: true };
-      }));
-      showFeedback(`Completed ${incompleteCount} task${incompleteCount > 1 ? 's' : ''}`);
-    } else {
-      showFeedback('No incomplete tasks to complete');
-    }
-  };
-  
-  const handleBatchDelete = () => {
-    const tasksToDelete = filterTag ? tasks.filter(t => t.tag === filterTag) : tasks;
-    const deleteCount = tasksToDelete.length;
-    
-    if (deleteCount > 0) {
-      if (filterTag) {
-        setTasks(tasks.filter(t => t.tag !== filterTag));
-      } else {
-        setTasks([]);
-      }
-      showFeedback(`Deleted ${deleteCount} task${deleteCount > 1 ? 's' : ''}`);
-    }
-  };
-  
-  const handleBatchTag = (newTag: string) => {
-    const tasksToUpdate = filterTag ? tasks.filter(t => t.tag === filterTag) : tasks;
-    const updateCount = tasksToUpdate.length;
-    
-    if (updateCount > 0) {
-      setTasks(tasks.map(task => {
-        if (filterTag && task.tag !== filterTag) return task;
-        return { ...task, tag: newTag };
-      }));
-      showFeedback(`Updated tag to "${newTag}" for ${updateCount} task${updateCount > 1 ? 's' : ''}`);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCommand();
-    }
-  };
-
-  const showHelpMessage = () => {
-    setShowHelp(true);
-    setInput('');
-  };
-
-  const handleCommand = async () => {
-    if (!input.trim()) return;
-    
-    // Check for help command directly
-    if (input.trim().toLowerCase() === 'help' || input.trim().toLowerCase() === 'commands') {
-      showHelpMessage();
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      // Try rule-based parsing first (fast and accurate for standard commands)
-      const command = parseCommand(input);
-      
-      // If the rule-based parser couldn't determine the command type with confidence,
-      // use AI to classify the command and extract entities
-      if (command.type === 'unknown' && command.confidence === 0) {
-        const aiClassification = await classifyCommand(input);
-        
-        if (aiClassification.intent === 'add_task') {
-          command.type = 'add';
-          command.taskText = aiClassification.entities.taskText || input;
-          command.tag = aiClassification.entities.tag;
-          command.priority = aiClassification.entities.priority as 'high' | 'medium' | 'low';
-        } else if (aiClassification.intent === 'complete_task') {
-          command.type = 'tick';
-          command.searchTerm = aiClassification.entities.searchTerm;
-        } else if (aiClassification.intent === 'delete_task') {
-          command.type = 'delete';
-          command.searchTerm = aiClassification.entities.searchTerm;
-        } else if (aiClassification.intent === 'change_tag') {
-          command.type = 'tag';
-          command.searchTerm = aiClassification.entities.searchTerm;
-          command.tag = aiClassification.entities.tag;
-        } else if (aiClassification.intent === 'set_priority') {
-          command.type = 'priority';
-          command.searchTerm = aiClassification.entities.searchTerm;
-          command.priority = aiClassification.entities.priority as 'high' | 'medium' | 'low';
-        } else if (aiClassification.intent === 'filter_tasks') {
-          command.type = 'filter';
-          command.tag = aiClassification.entities.tag;
-        } else if (aiClassification.intent === 'help') {
-          command.type = 'help';
-        }
-        
-        command.confidence = aiClassification.confidence;
-      }
-      
-      // Execute the command based on its type
-      switch (command.type) {
-        case 'add':
-          if (command.taskText) {
-            await addTask(command.taskText, command.tag, command.priority);
-          }
-          break;
-          
-        case 'tick':
-          if (command.searchTerm) {
-            tickTasksByText(command.searchTerm, command.allMatches);
-          }
-          break;
-          
-        case 'delete':
-          if (command.searchTerm) {
-            deleteTasksByText(command.searchTerm, command.allMatches);
-          }
-          break;
-          
-        case 'tag':
-          if (command.searchTerm && command.tag) {
-            updateTaskTag(command.searchTerm, command.tag);
-          }
-          break;
-          
-        case 'priority':
-          if (command.searchTerm && command.priority) {
-            updateTaskPriority(command.searchTerm, command.priority);
-          }
-          break;
-          
-        case 'filter':
-          if (command.tag) {
-            setFilterTag(command.tag);
-            showFeedback(`Showing tasks with tag: ${command.tag}`);
-          }
-          break;
-          
-        case 'help':
-          showHelpMessage();
-          break;
-          
-        case 'unknown':
-        default:
-          // If confidence is really low, maybe the user is not trying to execute a command
-          // but just wants to add a task with this text
-          if (command.confidence && command.confidence < 0.5) {
-            await addTask(input);
-          } else {
-            showFeedback("I'm not sure what you want to do. Try 'help' for a list of commands.");
-          }
-          break;
-      }
-      
-      setInput('');
-    } catch (error) {
-      console.error('Error processing command:', error);
-      showFeedback('Error processing command');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCommandSelect = (command: string) => {
-    setInput(command);
-    setShowHelp(false);
-  };
-
-  const handleSuggestionSelect = (suggestion: string) => {
-    addTask(suggestion);
-  };
-
-  const getAllTags = () => {
-    const tags = tasks.map(t => t.tag).filter((tag, index, self) => 
-      tag && self.indexOf(tag) === index
-    );
-    return tags;
-  };
-
-  const sortedTasks = filterAndSortTasks(tasks, filterTag);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <main className="max-w-2xl mx-auto p-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
-              AI To-Do
-            </span>
-            <span className="ml-2">🧠</span>
-          </h1>
-          <p className="text-gray-500">Smart task management powered by AI</p>
-        </div>
-
-        {feedbackMessage && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-4 animate-fade-in">
-            {feedbackMessage}
-          </div>
-        )}
-
-        <CommandInput 
-          input={input}
-          isLoading={isLoading}
-          onInputChange={setInput}
-          onKeyDown={handleKeyDown}
-          onAddTask={handleCommand}
-          onCommand={() => setShowHelp(true)}
-        />
-
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-          <p className="text-sm text-gray-600 mb-2">Try these natural commands:</p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="bg-gray-100 px-2 py-1 rounded">I need to buy milk</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">Complete the grocery task</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">Delete all workout tasks</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">Make dentist appointment high priority</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">Show me all work tasks</span>
-          </div>
-        </div>
-
-        <ProgressBar total={stats.total} completed={stats.completed} />
-
-        <TagFilter 
-          filterTag={filterTag}
-          tags={getAllTags()}
-          onFilterChange={setFilterTag}
-        />
-
-        {sortedTasks.length > 0 && (
-          <BatchActions 
-            taskCount={sortedTasks.length}
-            onBatchComplete={handleBatchComplete}
-            onBatchDelete={handleBatchDelete}
-            onBatchTag={handleBatchTag}
-          />
-        )}
-
-        {sortedTasks.length > 0 ? (
-          <ul className="space-y-3">
-            {sortedTasks.map(task => (
-              <Task 
-                key={task.id}
-                id={task.id}
-                text={task.text}
-                done={task.done}
-                tag={task.tag}
-                priority={task.priority}
-                createdAt={task.createdAt}
-                onToggle={toggleTask}
-                onDelete={deleteTask}
-              />
-            ))}
-          </ul>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-            <div className="text-5xl mb-3 animate-bounce-slow">✨</div>
-            <p className="text-gray-500">
-              {tasks.length === 0 
-                ? "No tasks yet. Add one to get started!" 
-                : "No tasks match the current filter."}
-            </p>
-          </div>
-        )}
-        
-        {/* Task Suggestions Section */}
-        {taskSuggestions.length > 0 && (
-          <div className="mt-8">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-lg font-medium text-gray-700">Suggestions based on your tasks</h2>
-              <button 
-                onClick={() => setShowSuggestions(!showSuggestions)}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                {showSuggestions ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            
-            {showSuggestions && (
-              <div className="bg-white rounded-lg shadow-sm p-4 mb-4 animate-fade-in">
-                <ul className="space-y-2">
-                  {taskSuggestions.map((suggestion, index) => (
-                    <li key={index} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded">
-                      <span>{suggestion}</span>
-                      <button 
-                        onClick={() => handleSuggestionSelect(suggestion)}
-                        className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
-                      >
-                        Add
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-      <footer className="mt-12 text-center pb-6 text-gray-400 text-sm">
-        <p>Powered by AI • Cohere API</p>
-      </footer>
-
-      {showHelp && (
-        <CommandHelp 
-          onClose={() => setShowHelp(false)} 
-          onSelectCommand={handleCommandSelect}
-        />
-      )}
-    </div>
-  );
 }

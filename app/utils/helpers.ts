@@ -70,13 +70,30 @@ export function filterAndSortTasks(tasks: any[], filterTag: string | null): any[
  * Command parsing for the agentic interface
  */
 export interface CommandResult {
-  type: 'add' | 'tick' | 'delete' | 'tag' | 'help' | 'unknown' | 'filter' | 'priority';
+  type: 'add' | 'tick' | 'delete' | 'tag' | 'help' | 'unknown' | 'filter' | 'priority' 
+       | 'due' | 'remind' | 'subtask' | 'repeat' | 'archive' | 'snooze' | 'project' | 'summarize'
+       | 'dark' | 'light' | 'sort';
   taskText?: string;
   tag?: string;
   searchTerm?: string;
   allMatches?: boolean;
   priority?: 'high' | 'medium' | 'low';
   confidence?: number;
+  dueDate?: number;
+  dueSpec?: string; // "today", "tomorrow", "next monday", etc.
+  reminderTime?: number;
+  reminderSpec?: string;
+  reminderRelativeHours?: number;
+  subtaskText?: string;
+  parentTaskSearch?: string;
+  recurringType?: 'daily' | 'weekly' | 'monthly' | 'custom';
+  recurringInterval?: number;
+  recurringDays?: number[];
+  projectName?: string;
+  project?: string; // For adding tasks to a project
+  sortCriteria?: 'priority' | 'dueDate' | 'createdAt' | 'alphabetical';
+  snoozeAmount?: number;
+  snoozeUnit?: 'days' | 'weeks' | 'months';
 }
 
 /**
@@ -116,6 +133,32 @@ function parseCommandRuleBased(text: string): CommandResult {
   // Add task with specific tag
   // Formats: "add [task] #[tag]" or "add [task] as [tag]"
   if (text.startsWith('add ')) {
+    // Check if it's an "add subtask" command
+    if (text.includes(' subtask ') && text.includes(' to ')) {
+      const subtaskMatch = text.match(/^add\s+subtask\s+(.*?)\s+to\s+(.*?)$/i);
+      if (subtaskMatch) {
+        return {
+          type: 'subtask',
+          subtaskText: subtaskMatch[1].trim(),
+          parentTaskSearch: subtaskMatch[2].trim(),
+          confidence: 1
+        };
+      }
+    }
+    
+    // Check if it's "add [task] to [project]" 
+    if (text.includes(' to ') && text.includes(' project')) {
+      const projectMatch = text.match(/^add\s+(.*?)\s+to\s+(.*?)\s+project$/i);
+      if (projectMatch) {
+        return {
+          type: 'add',
+          taskText: projectMatch[1].trim(),
+          project: projectMatch[2].trim(),
+          confidence: 1
+        };
+      }
+    }
+    
     const taskText = text.substring(4).trim();
     
     // Check for hashtag format: "add buy groceries #errand"
@@ -159,6 +202,18 @@ function parseCommandRuleBased(text: string): CommandResult {
   // Complete tasks
   // Formats: "tick [text]", "tick all [text]", "complete [text]"
   if (text.startsWith('tick ') || text.startsWith('complete ')) {
+    // Check for subtask completion
+    if (text.includes('subtask ')) {
+      const subtaskMatch = text.match(/^(?:tick|complete)\s+subtask\s+(.*?)$/i);
+      if (subtaskMatch) {
+        return {
+          type: 'subtask',
+          subtaskText: subtaskMatch[1].trim(),
+          confidence: 1
+        };
+      }
+    }
+    
     const withoutCommand = text.startsWith('tick ') 
       ? text.substring(5).trim() 
       : text.substring(9).trim();
@@ -194,6 +249,34 @@ function parseCommandRuleBased(text: string): CommandResult {
     }
     
     return { type: 'delete', searchTerm: withoutCommand, confidence: 1 };
+  }
+  
+  // Archive tasks
+  // Format: "archive [text]" or "archive all [text]"
+  if (text.startsWith('archive ')) {
+    const withoutCommand = text.substring(8).trim();
+    
+    // Handle "archive all" command
+    if (withoutCommand.startsWith('all ')) {
+      return {
+        type: 'archive',
+        searchTerm: withoutCommand.substring(4).trim(),
+        allMatches: true,
+        confidence: 1
+      };
+    }
+    
+    // Handle "archive completed" command
+    if (withoutCommand === 'completed') {
+      return {
+        type: 'archive',
+        searchTerm: 'completed',
+        allMatches: true,
+        confidence: 1
+      };
+    }
+    
+    return { type: 'archive', searchTerm: withoutCommand, confidence: 1 };
   }
   
   // Tag tasks
@@ -232,6 +315,258 @@ function parseCommandRuleBased(text: string): CommandResult {
         type: 'priority',
         searchTerm: match[1].trim(),
         priority: match[2] as 'high' | 'medium' | 'low',
+        confidence: 1
+      };
+    }
+  }
+  
+  // Set due date
+  // Format: "due [today/tomorrow/next week] [text]"
+  if (text.startsWith('due ')) {
+    const match = text.match(/^due\s+(\S+(?:\s+\S+)?)\s+(.+)$/);
+    if (match) {
+      const dueSpec = match[1].toLowerCase();
+      const searchTerm = match[2].trim();
+      
+      // Calculate the due date
+      let dueDate: number | undefined = undefined;
+      const now = new Date();
+      
+      if (dueSpec === 'today') {
+        dueDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).getTime();
+      } else if (dueSpec === 'tomorrow') {
+        dueDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 23, 59, 59).getTime();
+      } else if (dueSpec.startsWith('next ')) {
+        const dayOfWeek = dueSpec.substring(5);
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const targetDay = days.indexOf(dayOfWeek);
+        
+        if (targetDay !== -1) {
+          const currentDay = now.getDay();
+          let daysToAdd = targetDay - currentDay;
+          if (daysToAdd <= 0) daysToAdd += 7; // Next week
+          
+          dueDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysToAdd, 23, 59, 59).getTime();
+        }
+      }
+      
+      return {
+        type: 'due',
+        searchTerm,
+        dueSpec,
+        dueDate,
+        confidence: 1
+      };
+    }
+  }
+  
+  // Snooze task (postpone due date)
+  // Format: "snooze [task] [number] [days/weeks/months]"
+  if (text.startsWith('snooze ')) {
+    const match = text.match(/^snooze\s+(.*?)\s+(\d+)\s+(days?|weeks?|months?)$/);
+    if (match) {
+      const searchTerm = match[1].trim();
+      const amount = parseInt(match[2]);
+      let unit: 'days' | 'weeks' | 'months' = 'days';
+      
+      if (match[3].startsWith('week')) {
+        unit = 'weeks';
+      } else if (match[3].startsWith('month')) {
+        unit = 'months';
+      }
+      
+      return {
+        type: 'snooze',
+        searchTerm,
+        snoozeAmount: amount,
+        snoozeUnit: unit,
+        confidence: 1
+      };
+    }
+  }
+  
+  // Create recurring task
+  // Format: "repeat [daily/weekly/monthly] [task]"
+  if (text.startsWith('repeat ')) {
+    // Format: "repeat daily [task]"
+    const dailyMatch = text.match(/^repeat\s+daily\s+(.+)$/);
+    if (dailyMatch) {
+      return {
+        type: 'repeat',
+        searchTerm: dailyMatch[1].trim(),
+        recurringType: 'daily',
+        recurringInterval: 1,
+        confidence: 1
+      };
+    }
+    
+    // Format: "repeat weekly on monday [task]"
+    const weeklyMatch = text.match(/^repeat\s+weekly\s+on\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(.+)$/);
+    if (weeklyMatch) {
+      const dayOfWeek = weeklyMatch[1].toLowerCase();
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const dayIndex = days.indexOf(dayOfWeek);
+      
+      return {
+        type: 'repeat',
+        searchTerm: weeklyMatch[2].trim(),
+        recurringType: 'weekly',
+        recurringInterval: 1,
+        recurringDays: [dayIndex],
+        confidence: 1
+      };
+    }
+    
+    // Format: "repeat monthly [task]"
+    const monthlyMatch = text.match(/^repeat\s+monthly\s+(.+)$/);
+    if (monthlyMatch) {
+      return {
+        type: 'repeat',
+        searchTerm: monthlyMatch[1].trim(),
+        recurringType: 'monthly',
+        recurringInterval: 1,
+        confidence: 1
+      };
+    }
+  }
+  
+  // Set reminders
+  // Format: "remind me about [task] tomorrow 9am"
+  if (text.startsWith('remind ')) {
+    // Format for absolute reminders: "remind me about [task] [tomorrow/today] [time]"
+    const absoluteMatch = text.match(/^remind\s+me\s+(?:about\s+)?(.*?)\s+(today|tomorrow)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/i);
+    if (absoluteMatch) {
+      const taskText = absoluteMatch[1].trim();
+      const daySpec = absoluteMatch[2].toLowerCase();
+      const timeSpec = absoluteMatch[3].toLowerCase();
+      
+      // Calculate the reminder time
+      const now = new Date();
+      let reminderDate = new Date();
+      
+      if (daySpec === 'tomorrow') {
+        reminderDate.setDate(reminderDate.getDate() + 1);
+      }
+      
+      // Parse the time
+      const isAM = timeSpec.includes('am');
+      const isPM = timeSpec.includes('pm');
+      let hours = 0;
+      let minutes = 0;
+      
+      if (timeSpec.includes(':')) {
+        const timeParts = timeSpec.replace(/[^\d:]/g, '').split(':');
+        hours = parseInt(timeParts[0]);
+        minutes = parseInt(timeParts[1]);
+      } else {
+        hours = parseInt(timeSpec.replace(/[^\d]/g, ''));
+      }
+      
+      // Adjust for AM/PM
+      if (isPM && hours < 12) {
+        hours += 12;
+      } else if (isAM && hours === 12) {
+        hours = 0;
+      }
+      
+      reminderDate.setHours(hours, minutes, 0, 0);
+      
+      return {
+        type: 'remind',
+        searchTerm: taskText,
+        reminderSpec: `${daySpec} ${timeSpec}`,
+        reminderTime: reminderDate.getTime(),
+        confidence: 1
+      };
+    }
+    
+    // Format for relative reminders: "remind me [number] hours before [task]"
+    const relativeMatch = text.match(/^remind\s+me\s+(\d+)\s+hours?\s+before\s+(.+)$/i);
+    if (relativeMatch) {
+      const hours = parseInt(relativeMatch[1]);
+      const taskText = relativeMatch[2].trim();
+      
+      return {
+        type: 'remind',
+        searchTerm: taskText,
+        reminderRelativeHours: hours,
+        reminderSpec: `${hours} hours before`,
+        confidence: 1
+      };
+    }
+  }
+  
+  // Create project
+  // Format: "create project [name]"
+  if (text.startsWith('create project ')) {
+    const projectName = text.substring(15).trim();
+    if (projectName) {
+      return {
+        type: 'project',
+        projectName,
+        confidence: 1
+      };
+    }
+  }
+  
+  // List projects
+  // Format: "list projects"
+  if (text === 'list projects') {
+    return {
+      type: 'project',
+      confidence: 1
+    };
+  }
+  
+  // Sort tasks
+  // Format: "sort by [priority/due date/created]"
+  if (text.startsWith('sort by ')) {
+    const sortCriteria = text.substring(8).trim().toLowerCase();
+    
+    if (sortCriteria === 'priority') {
+      return {
+        type: 'sort',
+        sortCriteria: 'priority',
+        confidence: 1
+      };
+    } else if (sortCriteria === 'due date') {
+      return {
+        type: 'sort',
+        sortCriteria: 'dueDate',
+        confidence: 1
+      };
+    } else if (sortCriteria === 'created' || sortCriteria === 'created date') {
+      return {
+        type: 'sort',
+        sortCriteria: 'createdAt',
+        confidence: 1
+      };
+    } else if (sortCriteria === 'alphabetical' || sortCriteria === 'name') {
+      return {
+        type: 'sort',
+        sortCriteria: 'alphabetical',
+        confidence: 1
+      };
+    }
+  }
+  
+  // Theme toggle
+  // Format: "dark mode" or "light mode"
+  if (text === 'dark mode') {
+    return { type: 'dark', confidence: 1 };
+  } else if (text === 'light mode') {
+    return { type: 'light', confidence: 1 };
+  }
+  
+  // Summarize tasks
+  // Format: "summarize today" or "summarize this week"
+  if (text.startsWith('summarize ')) {
+    const period = text.substring(10).trim().toLowerCase();
+    
+    if (period === 'today' || period === 'this week' || period === 'tomorrow') {
+      return {
+        type: 'summarize',
+        dueSpec: period,
         confidence: 1
       };
     }
