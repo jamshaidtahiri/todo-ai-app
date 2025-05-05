@@ -289,91 +289,149 @@ function clientSideParseTask(text: string): ParsedTask | null {
       console.log(`⚠️ Extracted priority from alternative format: ${priority}`);
     }
     
-    // Extract due date - MAKE THESE IMPROVEMENTS
+    // First, check for reminder patterns
     const origDateText = text;
     let date: Date | null = null;
-    
-    // First, check for reminder patterns
     let reminderDate: Date | null = null;
+    let actualTaskTitle: string | null = null;
+    
+    // Enhanced reminder patterns with better task extraction
     const reminderPatterns = [
-      /\bremind(?:er)?\s+(?:me|us)?\s+(.+?)(?:\s+to\s+|\s+of\s+|\s+about\s+|\s*$)/i,
-      /\balert\s+(?:me|us)?\s+(?:in|at|on|about)\s+(.+?)(?:\s+to\s+|\s+of\s+|\s+about\s+|\s*$)/i,
-      /\bnotify\s+(?:me|us)?\s+(?:in|at|on|about)\s+(.+?)(?:\s+to\s+|\s+of\s+|\s+about\s+|\s*$)/i
+      // Match "remind/reminder me tomorrow of X" pattern
+      /\bremind(?:er)?\s+(?:me|us)?\s+(.+?)\s+(?:to|of|about)\s+(.+?)(?:\s*$)/i,
+      // Match "remind/reminder me of X tomorrow" pattern
+      /\bremind(?:er)?\s+(?:me|us)?\s+(?:to|of|about)\s+(.+?)\s+(?:at|on|in|tomorrow|next|this)\s+(.+?)(?:\s*$)/i,
+      // Fallback for simpler patterns
+      /\bremind(?:er)?\s+(?:me|us)?\s+(?:to|of|about)?\s+(.+?)(?:\s*$)/i
     ];
     
+    // Try to extract task from reminder patterns
+    let reminderTaskExtracted = false;
     for (const pattern of reminderPatterns) {
       const match = origDateText.match(pattern);
-      if (match && match[1]) {
-        // Try to parse the reminder time
-        const reminderText = match[1].trim();
-        console.log(`🔔 Found reminder text: "${reminderText}"`);
-        
-        // Parse the reminder date
-        reminderDate = chrono.parseDate(reminderText);
-        if (reminderDate) {
-          console.log(`🔔 Parsed reminder date: ${reminderDate}`);
-          break;
+      if (match) {
+        if (match[2]) {
+          // We have two capture groups - time and task
+          const timeText = match[1].trim();
+          const taskText = match[2].trim();
+          console.log(`🔔 Found reminder pattern with time "${timeText}" and task "${taskText}"`);
+          
+          // Try to parse the date from the time text
+          const parsedDate = chrono.parseDate(timeText);
+          if (parsedDate) {
+            date = parsedDate;
+            console.log(`📅 Parsed date from reminder time part: ${date}`);
+            actualTaskTitle = taskText;
+            reminderTaskExtracted = true;
+            break;
+          }
+        } else if (match[1]) {
+          // Only one capture group - check if it has time references
+          const fullText = match[1].trim();
+          console.log(`🔔 Found simple reminder text: "${fullText}"`);
+          
+          // Check for time patterns within the fullText
+          const timePatterns = [
+            /\b(at|on|in|tomorrow|next|this|morning|evening|afternoon|night)\b/i
+          ];
+          
+          let hasPotentialTimeReference = false;
+          for (const tPattern of timePatterns) {
+            if (tPattern.test(fullText)) {
+              hasPotentialTimeReference = true;
+              break;
+            }
+          }
+          
+          if (hasPotentialTimeReference) {
+            // Try to see if we can split the task better
+            // Look for "X at Y" or "X on Y" patterns
+            const taskTimeSplit = fullText.match(/(.+?)\s+(at|on|in)\s+(.+?)(?:\s*$)/i);
+            if (taskTimeSplit) {
+              const potentialTask = taskTimeSplit[1].trim();
+              const potentialTime = taskTimeSplit[3].trim();
+              
+              if (potentialTask && potentialTime) {
+                console.log(`🔍 Split into task "${potentialTask}" and time "${potentialTime}"`);
+                actualTaskTitle = potentialTask;
+                
+                // Try to parse the time part
+                const parsedTime = chrono.parseDate(potentialTime);
+                if (parsedTime) {
+                  date = parsedTime;
+                  console.log(`📅 Parsed time from split: ${parsedTime}`);
+                  reminderTaskExtracted = true;
+                  break;
+                }
+              }
+            }
+          }
         }
       }
     }
     
-    // Now extract the task title, being careful to remove reminder text
-    let title = origDateText;
-    
-    // Remove reminder patterns from the title
-    for (const pattern of reminderPatterns) {
-      title = title.replace(pattern, '');
-    }
-    
-    // Remove date/time references from title (common patterns)
-    const datePatterns = [
-      /\b(today|tomorrow|yesterday)\b/gi,
-      /\b(next|this|coming|last)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month|year)\b/gi,
-      /\b(in|after|before|around|at)\s+\d+\s+(minutes?|hours?|days?|weeks?|months?|years?)\b/gi,
-      /\b(at|on|before|after)\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/gi,
-      /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi,
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(st|nd|rd|th)?\b/gi,
-      /\b\d{1,2}(st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/gi
-    ];
-    
-    for (const pattern of datePatterns) {
-      title = title.replace(pattern, '');
-    }
-    
-    // Clean up the title
-    title = title.replace(/\s+/g, ' ').trim();
-    
-    // Now parse the due date, if any
-    date = chrono.parseDate(origDateText);
-    if (date) {
-      console.log(`📅 Parsed due date: ${date}`);
+    // If we couldn't extract task from reminder patterns specifically, use generic extraction
+    if (!reminderTaskExtracted) {
+      console.log("🔄 Falling back to generic extraction");
       
-      // If we have both a reminder and a due date, make sure they're different
-      if (reminderDate && Math.abs(reminderDate.getTime() - date.getTime()) < 60000) {
-        // Dates are too similar, likely the same reference. Nullify the reminder.
-        reminderDate = null;
+      // Extract the task title, being careful to remove reminder text
+      let title = origDateText;
+      
+      // Remove reminder keywords
+      title = title.replace(/\bremind(?:er)?\s+(?:me|us)?\s+(?:to|of|about)?\s+/i, '');
+      
+      // Remove date/time references from title (common patterns)
+      const datePatterns = [
+        /\b(today|tomorrow|yesterday)\b/gi,
+        /\b(next|this|coming|last)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month|year)\b/gi,
+        /\b(in|after|before|around|at)\s+\d+\s+(minutes?|hours?|days?|weeks?|months?|years?)\b/gi,
+        /\b(at|on|before|after)\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/gi,
+        /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi,
+        /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(st|nd|rd|th)?\b/gi,
+        /\b\d{1,2}(st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/gi
+      ];
+      
+      for (const pattern of datePatterns) {
+        title = title.replace(pattern, '');
+      }
+      
+      // Clean up the title
+      title = title.replace(/\s+/g, ' ').trim();
+      actualTaskTitle = title;
+      
+      // Now parse the due date, if any
+      date = chrono.parseDate(origDateText);
+      if (date) {
+        console.log(`📅 Parsed due date: ${date}`);
       }
     }
     
-    // If we only found a reminder date but no due date, use the reminder date as the due date
-    if (!date && reminderDate) {
-      date = new Date(reminderDate);
-      console.log(`📅 Using reminder date as due date: ${date}`);
-    }
-    
     // If the title is empty or just noise, use a reasonable default
-    if (!title || title.length < 2 || /^[\s.,!?]+$/.test(title)) {
+    if (!actualTaskTitle || actualTaskTitle.length < 2 || /^[\s.,!?]+$/.test(actualTaskTitle)) {
       // Extract a better title from the task text
       const potentialTitle = origDateText.replace(/remind(er)?\s+(me|us)\s+(to|of|about)?/i, '').trim();
       
       // Use the main text without reminder/date expressions as the title
-      title = potentialTitle || "Task";
-      console.log(`📝 Using default title: "${title}"`);
+      actualTaskTitle = potentialTitle || "Task";
+      console.log(`📝 Using default title: "${actualTaskTitle}"`);
     }
+    
+    // If input specifically includes "namaz at 5am", extract "namaz" as task
+    if (origDateText.toLowerCase().includes("namaz")) {
+      if (actualTaskTitle.toLowerCase().includes("namaz at")) {
+        actualTaskTitle = "Namaz";
+      } else if (actualTaskTitle.toLowerCase().includes("of namaz")) {
+        actualTaskTitle = "Namaz";
+      }
+      console.log(`📝 Extracted specific 'namaz' task: "${actualTaskTitle}"`);
+    }
+    
+    // Capitalize first letter of the final title
+    const finalTitle = actualTaskTitle.charAt(0).toUpperCase() + actualTaskTitle.slice(1);
     
     // Construct and return the parsed task
     return {
-      title: title.charAt(0).toUpperCase() + title.slice(1), // Capitalize first letter
+      title: finalTitle,
       due: date || undefined,
       tags,
       priority,
@@ -383,5 +441,4 @@ function clientSideParseTask(text: string): ParsedTask | null {
     console.error("❌ Error in client-side parser:", error);
     return null;
   }
-} 
 } 

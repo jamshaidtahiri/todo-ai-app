@@ -10,7 +10,8 @@ import TagFilter from './components/TagFilter';
 import ProgressBar from './components/ProgressBar';
 import CommandHelp from './components/CommandHelp';
 import BatchActions from './components/BatchActions';
-import { filterAndSortTasks, parseCommand, CommandResult } from './utils/helpers';
+import { parseCommand, CommandResult } from './utils/helpers';
+import { filterAndSortTasks } from './utils/taskFilters';
 import CalendarView from './components/CalendarView';
 import AIChatAssistant from './components/AIChatAssistant';
 import TabSystem from './components/TabSystem';
@@ -61,6 +62,21 @@ interface ExtendedCommandResult extends CommandResult {
   isCommand?: boolean;
 }
 
+// Create a type-safe reminder creator function
+const createReminder = (time: number): {
+  id: string;
+  time: number;
+  notified: boolean;
+  type: 'absolute' | 'relative';
+} => {
+  return {
+    id: uuidv4(),
+    time,
+    notified: false,
+    type: 'absolute'
+  };
+};
+
 export default function Home() {
   const [input, setInput] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -83,6 +99,23 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
+
+  // Setup reminder checking
+  const { checkRemindersNow, hasNotificationPermission } = useReminderCheck(tasks, setTasks);
+
+  // Check reminders when the app gains focus
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkRemindersNow();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [checkRemindersNow]);
 
   useEffect(() => {
     const stored = localStorage.getItem('tasks');
@@ -417,9 +450,6 @@ export default function Home() {
     }
   }, [tasks]);
   
-  // Use the custom hook for reminder checking
-  useReminderCheck(tasks, setTasks);
-  
   // Request notification permissions (keep this or remove if it's handled in the hook)
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -545,12 +575,7 @@ export default function Home() {
           const reminderDate = dueDate ? dueDate - (5 * 60 * 1000) : undefined;
           
           // Prepare reminder object
-          const reminders = reminderDate ? [{
-            id: uuidv4(),
-            time: reminderDate,
-            notified: false,
-            type: 'absolute'
-          }] : undefined;
+          const reminders = reminderDate ? [createReminder(reminderDate)] : undefined;
           
           // Create the task with the reminder
           addTask(
@@ -595,12 +620,7 @@ export default function Home() {
           
           if (needsReminder && dueDate) {
             const reminderTime = dueDate - (30 * 60 * 1000); // 30 minutes before due date
-            reminders = [{
-              id: uuidv4(),
-              time: reminderTime,
-              notified: false,
-              type: 'absolute'
-            }];
+            reminders = [createReminder(reminderTime)];
             console.log("Created reminder for task:", {
               taskTitle: parsedTask.title,
               dueDate: new Date(dueDate).toLocaleString(),
@@ -734,83 +754,15 @@ export default function Home() {
     }
   };
 
-  // Get filtered and sorted tasks
+  // Filter and sort tasks based on current criteria
   const getFilteredTasks = () => {
-    // First, filter by category if one is selected
-    let filteredTasks = [...tasks] as typeof tasks;
-    
-    // Apply category filter
-    if (activeCategory !== null) {
-      filteredTasks = filteredTasks.filter(t => t.category === activeCategory);
-    }
-    
-    // Apply tag filter if one is selected
-    if (filterTag !== null) {
-      filteredTasks = filteredTasks.filter(t => {
-        // Check in both the old tag field and the new tags array
-        return t.tag === filterTag || (t.tags && t.tags.includes(filterTag));
-      });
-    }
-    
-    // Apply project filter if one is selected
-    if (activeProject !== null) {
-      filteredTasks = filteredTasks.filter(t => t.project === activeProject);
-    }
-    
-    // Sort by the selected criteria
-    switch (sortCriteria) {
-      case 'priority':
-        filteredTasks = filteredTasks.sort((a, b) => {
-          // Sort completed tasks to the bottom
-          if (a.done !== b.done) return a.done ? 1 : -1;
-          
-          // Sort by priority if present
-          if (a.priority && b.priority && a.priority !== b.priority) {
-            const priorityValues = { high: 0, medium: 1, low: 2 };
-            return priorityValues[a.priority] - priorityValues[b.priority];
-          }
-          
-          // Then sort by creation date (newest first)
-          return b.createdAt - a.createdAt;
-        });
-        break;
-      case 'dueDate':
-        filteredTasks = filteredTasks.sort((a, b) => {
-          // Sort completed tasks to the bottom
-          if (a.done !== b.done) return a.done ? 1 : -1;
-          
-          // Sort tasks with due dates first, then by due date (soonest first)
-          const aHasDue = a.dueDate !== undefined;
-          const bHasDue = b.dueDate !== undefined;
-          
-          if (aHasDue !== bHasDue) return aHasDue ? -1 : 1;
-          if (aHasDue && bHasDue) return (a.dueDate || 0) - (b.dueDate || 0);
-          
-          // Then sort by creation date (newest first)
-          return b.createdAt - a.createdAt;
-        });
-        break;
-      case 'alphabetical':
-        filteredTasks = filteredTasks.sort((a, b) => {
-          // Sort completed tasks to the bottom
-          if (a.done !== b.done) return a.done ? 1 : -1;
-          
-          // Sort by title alphabetically
-          return a.text.localeCompare(b.text);
-        });
-        break;
-      case 'createdAt':
-      default:
-        filteredTasks = filteredTasks.sort((a, b) => {
-          // Sort completed tasks to the bottom
-          if (a.done !== b.done) return a.done ? 1 : -1;
-          
-          // Sort by creation date (newest first)
-          return b.createdAt - a.createdAt;
-        });
-    }
-    
-    return filteredTasks;
+    return filterAndSortTasks({
+      tasks,
+      tag: filterTag,
+      project: activeProject,
+      category: activeCategory,
+      sortBy: sortCriteria
+    });
   };
 
   // Handle task click from calendar
@@ -877,65 +829,125 @@ export default function Home() {
     }
   };
 
-  // Function to handle task loading/refresh
-  useEffect(() => {
-    // Filter and sort tasks based on criteria
-    const filteredTasks = getFilteredTasks();
+  // Handle input submit (for both tasks and commands)
+  const handleInputSubmit = async () => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
     
-    // ... existing code ...
-  }, [activeCategory, activeProject, filterTag, sortCriteria, tasks]);
+    const result = parseCommand(trimmed) as ExtendedCommandResult;
+    if (result.type !== 'unknown') {
+      result.isCommand = true;
+      await processCommand(trimmed);
+    } else {
+      // Try to parse natural language with LLM
+      setIsLoading(true);
+      try {
+        const parsed = await parseTaskWithLLM(trimmed);
+        if (parsed) {
+          addTask(
+            parsed.title, 
+            undefined, // Don't provide a single tag
+            parsed.priority,
+            parsed.due ? parsed.due.getTime() : undefined,
+            undefined, // notes
+            undefined, // subtasks
+            undefined, // project
+            undefined, // recurring
+            undefined, // reminders
+            parsed.tags // Pass the tags array
+          );
+        } else {
+          addTask(trimmed);
+        }
+      } catch (error) {
+        console.error("Error parsing task:", error);
+        addTask(trimmed);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    setInput(''); // Clear input after submission
+  };
+
+  // Add notification permission request to UI if needed
+  const renderNotificationPermissionRequest = () => {
+    if (typeof window !== 'undefined' && 
+        'Notification' in window && 
+        Notification.permission !== 'granted' && 
+        Notification.permission !== 'denied') {
+      return (
+        <div className="text-center mb-4">
+          <button 
+            onClick={() => Notification.requestPermission()}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Enable Notifications for Reminders
+          </button>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
-    <main className={`min-h-screen ${darkMode ? 'dark bg-slate-900' : 'bg-gray-50'}`}>
+    <main className={`min-h-screen pb-24 ${darkMode ? 'dark bg-slate-900 text-white' : 'bg-gray-50'}`}>
       {feedbackMessage && (
         <div className="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in-out">
           {feedbackMessage}
         </div>
       )}
       
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">
-            AI-Powered Todo App
-          </h1>
-          <div className="flex space-x-2">
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-              aria-label="Toggle dark mode"
-            >
-              {darkMode ? (
+      <div className="container mx-auto px-4 py-8">
+        <header className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Todo AI App</h1>
+            <div className="flex gap-2">
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-md bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600"
+                aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                {darkMode ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={() => setShowCalendarView(!showCalendarView)}
+                className={`p-2 rounded-md ${showCalendarView ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600'}`}
+                aria-label={showCalendarView ? "Hide calendar view" : "Show calendar view"}
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-              ) : (
+              </button>
+              <button
+                onClick={() => setShowChatAssistant(!showChatAssistant)}
+                className={`p-2 rounded-md ${showChatAssistant ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600'}`}
+                aria-label={showChatAssistant ? "Hide AI assistant" : "Show AI assistant"}
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
-              )}
-            </button>
-            
-            <button 
-              onClick={() => setShowCalendarView(!showCalendarView)}
-              className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${showCalendarView ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
-              aria-label="Toggle calendar view"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </button>
-            
-            <button 
-              onClick={() => setShowChatAssistant(!showChatAssistant)}
-              className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${showChatAssistant ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
-              aria-label="Toggle AI assistant"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-            </button>
+              </button>
+            </div>
           </div>
-        </div>
+          
+          {renderNotificationPermissionRequest()}
+          
+          <CommandInput
+            value={input}
+            onChange={setInput}
+            onSubmit={() => handleInputSubmit()}
+            isLoading={isLoading}
+            placeholder="Add task or enter command (try 'help' for commands)"
+          />
+        </header>
         
         {/* Tab System for Categories */}
         <TabSystem
@@ -946,52 +958,6 @@ export default function Home() {
           onEditTab={handleEditCategory}
           onDeleteTab={handleDeleteCategory}
         />
-        
-        <div className="mb-6">
-          <CommandInput
-            value={input}
-            onChange={setInput}
-            onSubmit={async () => {
-              const trimmed = input.trim();
-              if (trimmed) {
-                const result = parseCommand(trimmed) as ExtendedCommandResult;
-                if (result.type !== 'unknown') {
-                  result.isCommand = true;
-                  await processCommand(trimmed);
-                } else {
-                  // Try to parse natural language with LLM
-                  setIsLoading(true);
-                  try {
-                    const parsed = await parseTaskWithLLM(trimmed);
-                    if (parsed) {
-                      addTask(
-                        parsed.title, 
-                        undefined, // Don't provide a single tag
-                        parsed.priority,
-                        parsed.due ? parsed.due.getTime() : undefined,
-                        undefined, // notes
-                        undefined, // subtasks
-                        undefined, // project
-                        undefined, // recurring
-                        undefined, // reminders
-                        parsed.tags // Pass the tags array
-                      );
-                    } else {
-                      addTask(trimmed);
-                    }
-                  } catch (error) {
-                    console.error("Error parsing task:", error);
-                    addTask(trimmed);
-                  } finally {
-                    setIsLoading(false);
-                  }
-                }
-              }
-            }}
-            isLoading={isLoading}
-            placeholder="Add a task or enter a command (try 'help')"
-          />
-        </div>
         
         <div className="flex items-center justify-between mb-4">
           <div className="flex space-x-2">

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { getTagColor, formatRelativeTime } from '../utils/helpers';
 import DatePicker from './DatePicker';
 import RecurringTaskConfig from './RecurringTaskConfig';
-import ReminderConfig from './ReminderConfig';
+import ReminderManager from './ReminderManager';
 import TaskNotes from './TaskNotes';
 import SubtaskList from './SubtaskList';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -345,7 +345,7 @@ export default function Task({
             </div>
             
             <div className="my-3 relative">
-              <ReminderConfig
+              <ReminderManager
                 reminders={reminders}
                 dueDate={dueDate}
                 onChange={handleReminderChange}
