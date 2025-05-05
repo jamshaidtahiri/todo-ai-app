@@ -830,8 +830,8 @@ export default function Home() {
   };
 
   // Handle input submit (for both tasks and commands)
-  const handleInputSubmit = async () => {
-    const trimmed = input.trim();
+  const handleInputSubmit = async (inputValue: string) => {
+    const trimmed = inputValue.trim();
     if (!trimmed) return;
     
     const result = parseCommand(trimmed) as ExtendedCommandResult;
@@ -943,7 +943,7 @@ export default function Home() {
           <CommandInput
             value={input}
             onChange={setInput}
-            onSubmit={() => handleInputSubmit()}
+            onSubmit={handleInputSubmit}
             isLoading={isLoading}
             placeholder="Add task or enter command (try 'help' for commands)"
           />

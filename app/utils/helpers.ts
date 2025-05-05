@@ -56,6 +56,11 @@ export function filterAndSortTasks({
   category?: string | null,
   sortBy?: 'priority' | 'dueDate' | 'createdAt' | 'alphabetical'
 }): any[] {
+  // Return empty array if tasks is not a valid array
+  if (!Array.isArray(tasks)) {
+    return [];
+  }
+  
   // Start with a copy of all tasks
   let filteredTasks = [...tasks];
   
@@ -77,61 +82,42 @@ export function filterAndSortTasks({
     filteredTasks = filteredTasks.filter(t => t.project === project);
   }
   
-  // Sort by the selected criteria
-  switch (sortBy) {
-    case 'priority':
-      filteredTasks = filteredTasks.sort((a, b) => {
-        // Sort completed tasks to the bottom
-        if (a.done !== b.done) return a.done ? 1 : -1;
-        
+  // If no tasks, return empty array
+  if (filteredTasks.length === 0) {
+    return [];
+  }
+  
+  // Then sort: completed tasks at bottom, newest first
+  return filteredTasks.sort((a, b) => {
+    // Sort completed tasks to the bottom
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    
+    // Sort by the selected criteria
+    switch (sortBy) {
+      case 'priority':
         // Sort by priority if present
         if (a.priority && b.priority && a.priority !== b.priority) {
           const priorityValues = { high: 0, medium: 1, low: 2 };
           return priorityValues[a.priority as keyof typeof priorityValues] - 
                 priorityValues[b.priority as keyof typeof priorityValues];
         }
-        
-        // Then sort by creation date (newest first)
-        return b.createdAt - a.createdAt;
-      });
-      break;
-    case 'dueDate':
-      filteredTasks = filteredTasks.sort((a, b) => {
-        // Sort completed tasks to the bottom
-        if (a.done !== b.done) return a.done ? 1 : -1;
-        
+        break;
+      case 'dueDate':
         // Sort tasks with due dates first, then by due date (soonest first)
         const aHasDue = a.dueDate !== undefined;
         const bHasDue = b.dueDate !== undefined;
         
         if (aHasDue !== bHasDue) return aHasDue ? -1 : 1;
         if (aHasDue && bHasDue) return (a.dueDate || 0) - (b.dueDate || 0);
-        
-        // Then sort by creation date (newest first)
-        return b.createdAt - a.createdAt;
-      });
-      break;
-    case 'alphabetical':
-      filteredTasks = filteredTasks.sort((a, b) => {
-        // Sort completed tasks to the bottom
-        if (a.done !== b.done) return a.done ? 1 : -1;
-        
+        break;
+      case 'alphabetical':
         // Sort by title alphabetically
         return a.text.localeCompare(b.text);
-      });
-      break;
-    case 'createdAt':
-    default:
-      filteredTasks = filteredTasks.sort((a, b) => {
-        // Sort completed tasks to the bottom
-        if (a.done !== b.done) return a.done ? 1 : -1;
-        
-        // Sort by creation date (newest first)
-        return b.createdAt - a.createdAt;
-      });
-  }
-  
-  return filteredTasks;
+    }
+    
+    // Default: sort by creation date (newest first)
+    return b.createdAt - a.createdAt;
+  });
 }
 
 /**
