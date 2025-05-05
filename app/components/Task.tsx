@@ -5,7 +5,7 @@ import RecurringTaskConfig from './RecurringTaskConfig';
 import ReminderManager from './ReminderManager';
 import TaskNotes from './TaskNotes';
 import SubtaskList from './SubtaskList';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { TaskTag } from './TaskTag';
 import { TaskPriorityBadge } from './TaskPriorityBadge';
 import { TaskDueDate } from './TaskDueDate';
@@ -313,62 +313,59 @@ export default function Task({
           
           <button 
             onClick={() => onDelete(id)}
-            className={`text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 rounded-full p-1 ${isHovering ? 'opacity-100' : 'opacity-70'}`}
+            className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors duration-200 p-1"
             aria-label="Delete task"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
         </div>
       </div>
       
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-slate-700 mt-1 overflow-hidden relative z-10"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-3 relative">
-              <DatePicker 
-                date={dueDate} 
-                onChange={handleDueDateChange} 
-              />
-              
-              <RecurringTaskConfig
-                config={recurring}
-                onChange={handleRecurringChange}
-              />
-            </div>
+      {isExpanded && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          transition={{ duration: 0.2 }}
+          className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-slate-700 mt-1 overflow-hidden relative z-10"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-3 relative">
+            <DatePicker 
+              date={dueDate} 
+              onChange={handleDueDateChange} 
+            />
             
-            <div className="my-3 relative">
-              <ReminderManager
-                reminders={reminders}
-                dueDate={dueDate}
-                onChange={handleReminderChange}
-              />
-            </div>
-            
-            <div className="my-3">
-              <TaskNotes
-                notes={notes}
-                onChange={handleNotesChange}
-              />
-            </div>
-            
-            <div className="mt-4">
-              <SubtaskList
-                taskId={id}
-                subtasks={subtasks}
-                onChange={handleSubtasksChange}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <RecurringTaskConfig
+              config={recurring}
+              onChange={handleRecurringChange}
+            />
+          </div>
+          
+          <div className="my-3 relative">
+            <ReminderManager
+              reminders={reminders}
+              dueDate={dueDate}
+              onChange={handleReminderChange}
+            />
+          </div>
+          
+          <div className="my-3">
+            <TaskNotes
+              notes={notes}
+              onChange={handleNotesChange}
+            />
+          </div>
+          
+          <div className="mt-4">
+            <SubtaskList
+              taskId={id}
+              subtasks={subtasks}
+              onChange={handleSubtasksChange}
+            />
+          </div>
+        </motion.div>
+      )}
     </motion.li>
   );
 } 

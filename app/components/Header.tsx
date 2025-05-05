@@ -157,8 +157,6 @@ const AnimatedSearchBar: React.FC<{
           onSubmit={onSubmit}
           initial={{ opacity: 0, width: 0 }}
           animate={{ opacity: 1, width: 200 }}
-          exit={{ opacity: 0, width: 0 }}
-          transition={{ duration: 0.2 }}
           className="absolute right-10 top-0 origin-right"
         >
           <input

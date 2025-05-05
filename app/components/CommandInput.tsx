@@ -22,6 +22,13 @@ export default function CommandInput({
       onSubmit(value);
     }
   };
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLoading) {
+      onSubmit(value);
+    }
+  };
 
   const naturalLanguagePlaceholder = "Try natural language: 'Call mom tomorrow at 5pm #family !high'";
 

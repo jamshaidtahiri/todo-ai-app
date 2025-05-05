@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface FloatingActionButtonProps {
   onClick: () => void;
@@ -38,23 +38,21 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
           />
         </motion.svg>
       </motion.button>
-      <AnimatePresence>
-        {isOpen && children && (
-          <motion.div
-            className="absolute bottom-16 right-0 bg-white dark:bg-slate-800 shadow-lg rounded-lg p-4 min-w-[16rem]"
-            initial={{ opacity: 0, y: 20, scale: 0.8 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.8 }}
-            transition={{ duration: 0.2 }}
-            style={{ 
-              originX: 1,
-              originY: 1
-            }}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      
+      {isOpen && children && (
+        <motion.div
+          className="absolute bottom-16 right-0 bg-white dark:bg-slate-800 shadow-lg rounded-lg p-4 min-w-[16rem]"
+          initial={{ opacity: 0, y: 20, scale: 0.8 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.2 }}
+          style={{ 
+            originX: 1,
+            originY: 1
+          }}
+        >
+          {children}
+        </motion.div>
+      )}
     </div>
   );
 }; 

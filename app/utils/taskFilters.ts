@@ -14,6 +14,11 @@ export function filterAndSortTasks({
   category?: string | null,
   sortBy?: 'priority' | 'dueDate' | 'createdAt' | 'alphabetical'
 }): any[] {
+  // Return empty array if tasks is not a valid array
+  if (!Array.isArray(tasks)) {
+    return [];
+  }
+  
   // Start with a copy of all tasks
   let filteredTasks = [...tasks];
   
