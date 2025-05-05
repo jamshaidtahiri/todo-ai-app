@@ -1,23 +1,23 @@
 import React from 'react';
 import { getTagColor } from '../utils/helpers';
 
-type TagFilterProps = {
-  filterTag: string | null;
+export type TagFilterProps = {
+  currentTag: string | null;
   tags: string[];
-  onFilterChange: (tag: string | null) => void;
+  onSelectTag: (tag: string | null) => void;
 };
 
-export default function TagFilter({ filterTag, tags, onFilterChange }: TagFilterProps) {
+export default function TagFilter({ currentTag, tags, onSelectTag }: TagFilterProps) {
   if (tags.length === 0) return null;
 
   return (
     <div className="mb-4 flex flex-wrap gap-2">
       <button 
-        onClick={() => onFilterChange(null)}
+        onClick={() => onSelectTag(null)}
         className={`text-xs px-3 py-1 rounded-full transition-all ${
-          filterTag === null 
-            ? 'bg-gray-800 text-white' 
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          currentTag === null 
+            ? 'bg-gray-800 dark:bg-gray-700 text-white' 
+            : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600'
         }`}
       >
         All
@@ -26,10 +26,10 @@ export default function TagFilter({ filterTag, tags, onFilterChange }: TagFilter
       {tags.map(tag => (
         <button 
           key={tag} 
-          onClick={() => onFilterChange(tag === filterTag ? null : tag)}
+          onClick={() => onSelectTag(tag === currentTag ? null : tag)}
           className={`text-xs px-3 py-1 rounded-full transition-all ${
-            tag === filterTag 
-              ? 'bg-gray-800 text-white' 
+            tag === currentTag 
+              ? 'bg-gray-800 dark:bg-gray-700 text-white' 
               : `${getTagColor(tag)} opacity-80 hover:opacity-100`
           }`}
         >

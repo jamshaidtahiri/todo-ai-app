@@ -1,12 +1,19 @@
 import { useEffect, useRef } from 'react';
 
-type CommandHelpProps = {
+export type CommandHelpProps = {
   onClose: () => void;
-  onSelectCommand: (command: string) => void;
+  onSelectCommand?: (command: string) => void;
 };
 
 export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  
+  const handleCommandSelect = (command: string) => {
+    if (onSelectCommand) {
+      onSelectCommand(command);
+    }
+    onClose();
+  };
   
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -37,7 +44,7 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
         { command: 'add Buy groceries', description: 'Add a new task' },
         { command: 'add Buy groceries #errand', description: 'Add task with a tag' },
         { command: 'add Buy milk !high', description: 'Add high priority task' },
-        { command: 'complete buy milk', description: 'Mark task as done' },
+        { command: 'tick buy milk', description: 'Mark task as done' },
         { command: 'delete groceries', description: 'Delete task containing "groceries"' },
       ]
     },
@@ -57,7 +64,7 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
       items: [
         { command: 'tick all groceries', description: 'Complete all matching tasks' },
         { command: 'delete all work', description: 'Delete all matching tasks' },
-        { command: 'archive all completed', description: 'Archive all completed tasks' },
+        { command: 'archive completed', description: 'Archive all completed tasks' },
         { command: 'snooze workout 2 days', description: 'Postpone due date by 2 days' },
       ]
     },
@@ -99,7 +106,7 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
       category: 'Subtasks',
       items: [
         { command: 'add subtask Milk to Groceries', description: 'Add subtask to existing task' },
-        { command: 'complete subtask Milk', description: 'Complete a specific subtask' },
+        { command: 'tick subtask Milk', description: 'Complete a specific subtask' },
       ]
     },
     {
@@ -109,6 +116,7 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
         { command: 'light mode', description: 'Switch to light theme' },
         { command: 'sort by priority', description: 'Change task sorting' },
         { command: 'sort by due date', description: 'Sort tasks by due date' },
+        { command: 'calendar', description: 'Toggle calendar view' },
       ]
     },
   ];
@@ -117,13 +125,13 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 animate-fade-in">
       <div 
         ref={modalRef}
-        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
       >
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800">Available Commands</h2>
+        <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Available Commands</h2>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -132,25 +140,25 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
         </div>
         
         <div className="overflow-auto p-6">
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
             Type these commands in the input box or click on a command to use it.
           </p>
           
           <div className="space-y-6">
             {commands.map((category, index) => (
               <div key={index}>
-                <h3 className="text-md font-medium text-gray-700 mb-3">{category.category}</h3>
-                <div className="bg-gray-50 rounded-lg overflow-hidden">
+                <h3 className="text-md font-medium text-gray-700 dark:text-gray-200 mb-3">{category.category}</h3>
+                <div className="bg-gray-50 dark:bg-slate-700 rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <tbody>
                       {category.items.map((item, idx) => (
                         <tr 
                           key={idx} 
-                          className={`border-b border-gray-200 last:border-0 hover:bg-indigo-50 cursor-pointer transition-colors`}
-                          onClick={() => onSelectCommand(item.command)}
+                          className={`border-b border-gray-200 dark:border-slate-600 last:border-0 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer transition-colors`}
+                          onClick={() => handleCommandSelect(item.command)}
                         >
-                          <td className="py-2 px-4 font-mono text-indigo-600">{item.command}</td>
-                          <td className="py-2 px-4 text-gray-600">{item.description}</td>
+                          <td className="py-2 px-4 font-mono text-indigo-600 dark:text-indigo-400">{item.command}</td>
+                          <td className="py-2 px-4 text-gray-600 dark:text-gray-300">{item.description}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -161,8 +169,8 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
           </div>
         </div>
         
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <p className="text-sm text-gray-500 text-center">
+        <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700">
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
             You can also use natural language to create and manage tasks
           </p>
         </div>

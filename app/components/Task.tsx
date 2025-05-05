@@ -6,57 +6,65 @@ import ReminderConfig from './ReminderConfig';
 import TaskNotes from './TaskNotes';
 import SubtaskList from './SubtaskList';
 
-type TaskProps = {
-  id: string;
-  text: string;
-  done: boolean;
-  tag: string;
-  createdAt?: number;
-  priority?: 'high' | 'medium' | 'low';
-  status: 'pending' | 'completed' | 'archived';
-  dueDate?: number;
-  notes?: string;
-  subtasks?: {
+export type TaskProps = {
+  task: {
     id: string;
     text: string;
     done: boolean;
-  }[];
-  recurring?: {
-    type: 'daily' | 'weekly' | 'monthly' | 'custom';
-    interval: number;
-    daysOfWeek?: number[];
-    endDate?: number;
+    tag: string;
+    createdAt: number;
+    priority?: 'high' | 'medium' | 'low';
+    status: 'pending' | 'completed' | 'archived';
+    dueDate?: number;
+    notes?: string;
+    subtasks?: {
+      id: string;
+      text: string;
+      done: boolean;
+    }[];
+    recurring?: {
+      type: 'daily' | 'weekly' | 'monthly' | 'custom';
+      interval: number;
+      daysOfWeek?: number[];
+      endDate?: number;
+    };
+    reminders?: {
+      id: string;
+      time: number;
+      notified: boolean;
+      type: 'absolute' | 'relative';
+    }[];
+    project?: string;
   };
-  reminders?: {
-    id: string;
-    time: number;
-    notified: boolean;
-    type: 'absolute' | 'relative';
-  }[];
-  project?: string;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-  onUpdate?: (id: string, updates: Partial<TaskProps>) => void;
+  onToggle: () => void;
+  onDelete: () => void;
+  onUpdate: (updates: Partial<any>) => void;
+  darkMode?: boolean;
 };
 
 export default function Task({ 
-  id, 
-  text, 
-  done, 
-  tag, 
-  createdAt, 
-  priority, 
-  status,
-  dueDate,
-  notes,
-  subtasks,
-  recurring,
-  reminders,
-  project,
+  task,
   onToggle, 
   onDelete,
-  onUpdate = () => {} 
+  onUpdate,
+  darkMode = false
 }: TaskProps) {
+  const {
+    id,
+    text,
+    done,
+    tag,
+    createdAt,
+    priority,
+    status,
+    dueDate,
+    notes,
+    subtasks,
+    recurring,
+    reminders,
+    project
+  } = task;
+  
   const [isHovering, setIsHovering] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
@@ -76,14 +84,14 @@ export default function Task({
   
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value as 'pending' | 'completed' | 'archived';
-    onUpdate(id, { status: newStatus });
+    onUpdate({ status: newStatus });
     if (newStatus === 'completed' && !done) {
-      onToggle(id); // Mark as done if status changes to completed
+      onToggle(); // Mark as done if status changes to completed
     }
   };
   
   const handleDueDateChange = (date: number | undefined) => {
-    onUpdate(id, { dueDate: date });
+    onUpdate({ dueDate: date });
   };
   
   const handleRecurringChange = (config: {
@@ -92,7 +100,7 @@ export default function Task({
     daysOfWeek?: number[];
     endDate?: number;
   } | undefined) => {
-    onUpdate(id, { recurring: config });
+    onUpdate({ recurring: config });
   };
   
   const handleReminderChange = (reminderConfig: {
@@ -101,11 +109,11 @@ export default function Task({
     notified: boolean;
     type: 'absolute' | 'relative';
   }[] | undefined) => {
-    onUpdate(id, { reminders: reminderConfig });
+    onUpdate({ reminders: reminderConfig });
   };
   
   const handleNotesChange = (updatedNotes: string | undefined) => {
-    onUpdate(id, { notes: updatedNotes });
+    onUpdate({ notes: updatedNotes });
   };
   
   const handleSubtasksChange = (updatedSubtasks: {
@@ -113,7 +121,7 @@ export default function Task({
     text: string;
     done: boolean;
   }[] | undefined) => {
-    onUpdate(id, { subtasks: updatedSubtasks });
+    onUpdate({ subtasks: updatedSubtasks });
   };
   
   // Format due date with color based on proximity
@@ -162,13 +170,13 @@ export default function Task({
     
     return (
       <div className="flex items-center gap-1">
-        <div className="w-16 h-1 bg-gray-200 rounded-full overflow-hidden">
+        <div className="w-16 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div 
             className="h-full bg-indigo-500 rounded-full" 
             style={{ width: `${percentage}%` }}
           ></div>
         </div>
-        <span className="text-xs text-gray-500">{percentage}%</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{percentage}%</span>
       </div>
     );
   };
@@ -184,9 +192,9 @@ export default function Task({
   
   return (
     <li 
-      className={`bg-white border rounded-lg shadow-sm transition-all duration-300 ${
+      className={`bg-white dark:bg-slate-800 border rounded-lg shadow-sm transition-all duration-300 ${
         done ? 'opacity-60' : 'hover:shadow-md'
-      } ${isHovering ? 'border-gray-300' : 'border-gray-200'} animate-fade-in ${priorityClass}`}
+      } ${isHovering ? 'border-gray-300 dark:border-slate-600' : 'border-gray-200 dark:border-slate-700'} animate-fade-in ${priorityClass}`}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
@@ -196,7 +204,7 @@ export default function Task({
             type="checkbox" 
             id={`task-${id}`}
             checked={done} 
-            onChange={() => onToggle(id)} 
+            onChange={onToggle} 
             className="checkbox"
           />
           <span className="checkmark">
@@ -209,13 +217,13 @@ export default function Task({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className={`text-gray-900 ${done ? 'line-through text-gray-500' : ''}`}>
+              <p className={`text-gray-900 dark:text-white ${done ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>
                 {text}
               </p>
             </div>
             <button 
               onClick={() => setIsExpanded(!isExpanded)}
-              className="ml-1 text-gray-400 hover:text-gray-600"
+              className="ml-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
               aria-label={isExpanded ? "Show less" : "Show more"}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -233,9 +241,9 @@ export default function Task({
             
             {priority && (
               <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${
-                priority === 'high' ? 'bg-red-100 text-red-800' :
-                priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-green-100 text-green-800'
+                priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
               }`}>
                 {priority === 'high' ? '!urgent' : priority === 'medium' ? '!medium' : '!low'}
               </span>
@@ -244,7 +252,7 @@ export default function Task({
             {dueDate && formatDueDate()}
             
             {recurring && (
-              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
                 <svg xmlns="http://www.w3.org/2000/svg" className="inline-block h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
@@ -253,7 +261,7 @@ export default function Task({
             )}
             
             {reminders && reminders.length > 0 && (
-              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
                 <svg xmlns="http://www.w3.org/2000/svg" className="inline-block h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -264,13 +272,13 @@ export default function Task({
             {getSubtaskCompletion()}
             
             {createdAt && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
                 {formatRelativeTime(createdAt)}
               </span>
             )}
             
             {isDueSoon() && (
-              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 animate-pulse">
+              <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 animate-pulse">
                 Due soon
               </span>
             )}
@@ -281,7 +289,7 @@ export default function Task({
           <select
             value={status}
             onChange={handleStatusChange}
-            className="text-xs border border-gray-200 rounded p-1 bg-white"
+            className="text-xs border border-gray-200 dark:border-slate-600 rounded p-1 bg-white dark:bg-slate-700 dark:text-white"
           >
             <option value="pending">Pending</option>
             <option value="completed">Completed</option>
@@ -289,8 +297,8 @@ export default function Task({
           </select>
           
           <button 
-            onClick={() => onDelete(id)}
-            className={`text-gray-400 hover:text-red-500 transition-colors ${isHovering ? 'opacity-100' : 'opacity-70'}`}
+            onClick={onDelete}
+            className={`text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors ${isHovering ? 'opacity-100' : 'opacity-70'}`}
             aria-label="Delete task"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -301,7 +309,7 @@ export default function Task({
       </div>
       
       {isExpanded && (
-        <div className="px-4 pb-4 pt-0 border-t border-gray-100 mt-1">
+        <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-slate-700 mt-1">
           <div className="grid grid-cols-2 gap-4 my-3">
             <DatePicker 
               date={dueDate} 

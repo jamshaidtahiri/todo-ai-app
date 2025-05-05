@@ -1,85 +1,74 @@
 import React, { useState } from 'react';
 
-type BatchActionsProps = {
-  onBatchComplete: () => void;
-  onBatchDelete: () => void;
-  onBatchTag: (tag: string) => void;
-  taskCount: number;
+export type BatchActionsProps = {
+  onComplete: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onSort: () => void;
+  sortCriteria: 'priority' | 'dueDate' | 'createdAt' | 'alphabetical';
+  onToggleDarkMode: () => void;
+  darkMode: boolean;
 };
 
 export default function BatchActions({ 
-  onBatchComplete, 
-  onBatchDelete, 
-  onBatchTag,
-  taskCount 
+  onComplete,
+  onArchive,
+  onDelete,
+  onSort,
+  sortCriteria,
+  onToggleDarkMode,
+  darkMode
 }: BatchActionsProps) {
-  const [showTagInput, setShowTagInput] = useState(false);
-  const [tagValue, setTagValue] = useState('');
-  
-  const handleTagSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (tagValue.trim()) {
-      onBatchTag(tagValue.trim());
-      setTagValue('');
-      setShowTagInput(false);
+  // Format sort criteria for display
+  const getSortLabel = (criteria: string): string => {
+    switch (criteria) {
+      case 'priority': return 'Priority';
+      case 'dueDate': return 'Due Date';
+      case 'createdAt': return 'Created';
+      case 'alphabetical': return 'Alphabetical';
+      default: return criteria;
     }
   };
   
-  if (taskCount === 0) return null;
-  
   return (
-    <div className="bg-white rounded-lg shadow-sm p-3 mb-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-700 mr-2">
-          <span className="font-medium">{taskCount} task{taskCount !== 1 ? 's' : ''}</span> in current view
-        </p>
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-3 mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-sm text-gray-700 dark:text-gray-300 flex items-center space-x-2">
+          <button 
+            onClick={onToggleDarkMode}
+            className="text-xs px-3 py-1 bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-gray-200 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+          >
+            {darkMode ? '☀️ Light' : '🌙 Dark'}
+          </button>
+          
+          <button 
+            onClick={onSort}
+            className="text-xs px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+          >
+            Sorted by: {getSortLabel(sortCriteria)}
+          </button>
+        </div>
         
         <div className="flex flex-wrap gap-2">
           <button 
-            onClick={onBatchComplete}
-            className="text-xs px-3 py-1 bg-green-100 text-green-800 rounded-full hover:bg-green-200 transition-colors"
+            onClick={onComplete}
+            className="text-xs px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
           >
-            Complete all
+            Complete All
           </button>
           
-          {!showTagInput ? (
-            <button 
-              onClick={() => setShowTagInput(true)}
-              className="text-xs px-3 py-1 bg-blue-100 text-blue-800 rounded-full hover:bg-blue-200 transition-colors"
-            >
-              Tag all
-            </button>
-          ) : (
-            <form onSubmit={handleTagSubmit} className="flex">
-              <input
-                type="text"
-                value={tagValue}
-                onChange={(e) => setTagValue(e.target.value)}
-                placeholder="Tag name"
-                className="text-xs py-1 px-2 border rounded-l w-20 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                autoFocus
-              />
-              <button 
-                type="submit"
-                className="text-xs px-2 py-1 bg-blue-500 text-white rounded-r hover:bg-blue-600"
-              >
-                Set
-              </button>
-              <button 
-                type="button"
-                onClick={() => setShowTagInput(false)}
-                className="text-xs px-1 py-1 ml-1 text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </form>
-          )}
+          <button 
+            onClick={onArchive}
+            className="text-xs px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+          >
+            Archive Completed
+          </button>
           
           <button 
-            onClick={onBatchDelete}
-            className="text-xs px-3 py-1 bg-red-100 text-red-800 rounded-full hover:bg-red-200 transition-colors"
+            onClick={onDelete}
+            className="text-xs px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
           >
-            Delete all
+            Delete Archived
           </button>
         </div>
       </div>

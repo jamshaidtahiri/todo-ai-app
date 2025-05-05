@@ -1,35 +1,39 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-type CommandInputProps = {
-  input: string;
+export type CommandInputProps = {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (value: string) => void;
   isLoading: boolean;
-  onInputChange: (value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-  onAddTask: () => void;
-  onCommand: () => void;
+  placeholder?: string;
 };
 
 export default function CommandInput({
-  input,
+  value,
+  onChange,
+  onSubmit,
   isLoading,
-  onInputChange,
-  onKeyDown,
-  onAddTask,
-  onCommand
+  placeholder = "Type a command (e.g., add buy milk #errand)"
 }: CommandInputProps) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isLoading) {
+      onSubmit(value);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 mb-6 transition-all duration-300 transform hover:shadow-xl">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 mb-6 transition-all duration-300 transform hover:shadow-xl">
       <div className="flex flex-col gap-3">
         <div className="relative">
-          <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+          <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500">
             &gt;
           </span>
           <input
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            className="w-full bg-gray-50 border border-gray-200 p-4 pl-8 pr-16 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            placeholder="Type a command (e.g., add buy milk #errand)"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 p-4 pl-8 pr-16 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all dark:text-white"
+            placeholder={placeholder}
             disabled={isLoading}
           />
           {isLoading && (
@@ -40,16 +44,16 @@ export default function CommandInput({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={onAddTask}
+            onClick={() => onSubmit(value)}
             disabled={isLoading}
             className="flex-1 bg-gradient-to-r from-blue-500 to-blue-700 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-blue-800 transition-all shadow-md hover:shadow-lg disabled:opacity-70"
           >
             Add/Execute
           </button>
           <button
-            onClick={() => onInputChange('help')}
+            onClick={() => onChange('help')}
             disabled={isLoading}
-            className="bg-gray-200 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-300 transition-all shadow-sm hover:shadow-md disabled:opacity-70"
+            className="bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 py-3 px-4 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-slate-600 transition-all shadow-sm hover:shadow-md disabled:opacity-70"
           >
             Help
           </button>

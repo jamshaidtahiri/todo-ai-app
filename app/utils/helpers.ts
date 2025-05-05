@@ -72,7 +72,7 @@ export function filterAndSortTasks(tasks: any[], filterTag: string | null): any[
 export interface CommandResult {
   type: 'add' | 'tick' | 'delete' | 'tag' | 'help' | 'unknown' | 'filter' | 'priority' 
        | 'due' | 'remind' | 'subtask' | 'repeat' | 'archive' | 'snooze' | 'project' | 'summarize'
-       | 'dark' | 'light' | 'sort';
+       | 'dark' | 'light' | 'sort' | 'calendar' | 'view calendar';
   taskText?: string;
   tag?: string;
   searchTerm?: string;
@@ -548,6 +548,12 @@ function parseCommandRuleBased(text: string): CommandResult {
         confidence: 1
       };
     }
+  }
+  
+  // Calendar view toggle
+  // Format: "calendar" or "view calendar"
+  if (text === 'calendar' || text === 'view calendar' || text === 'show calendar' || text === 'toggle calendar') {
+    return { type: 'calendar', confidence: 1 };
   }
   
   // Theme toggle
