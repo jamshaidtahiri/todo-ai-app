@@ -1,9 +1,18 @@
 module.exports = {
     content: ["./app/**/*.{js,ts,jsx,tsx}"],
+    safelist: [
+      'text-text-primary',
+      'text-text-secondary',
+      'text-text-tertiary',
+      'focus:ring-primary/20'
+    ],
     theme: {
       extend: {
         colors: {
           primary: {
+            DEFAULT: 'var(--primary)',
+            light: 'var(--primary-light)',
+            dark: 'var(--primary-dark)',
             50: '#EFF6FF',
             100: '#DBEAFE',
             200: '#BFDBFE',
@@ -27,6 +36,34 @@ module.exports = {
             800: '#5B21B6',
             900: '#4C1D95',
           },
+          text: {
+            primary: 'var(--text-primary)',
+            secondary: 'var(--text-secondary)',
+            tertiary: 'var(--text-tertiary)',
+            'on-primary': 'var(--text-on-primary)'
+          },
+          surface: {
+            DEFAULT: 'var(--surface)',
+            hover: 'var(--surface-hover)',
+            elevated: 'var(--surface-elevated)'
+          },
+          border: {
+            DEFAULT: 'var(--border)',
+            hover: 'var(--border-hover)'
+          },
+          background: 'var(--background)',
+          accent: {
+            red: 'var(--accent-red)',
+            amber: 'var(--accent-amber)',
+            green: 'var(--accent-green)',
+            blue: 'var(--accent-blue)',
+            purple: 'var(--accent-purple)',
+            'red-light': 'var(--accent-red-light)',
+            'amber-light': 'var(--accent-amber-light)',
+            'green-light': 'var(--accent-green-light)',
+            'blue-light': 'var(--accent-blue-light)',
+            'purple-light': 'var(--accent-purple-light)',
+          }
         },
         fontFamily: {
           sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -34,6 +71,10 @@ module.exports = {
         boxShadow: {
           task: '0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1)',
           'task-hover': '0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.1)',
+          sm: 'var(--shadow-sm)',
+          DEFAULT: 'var(--shadow)',
+          md: 'var(--shadow-md)',
+          lg: 'var(--shadow-lg)',
         },
         animation: {
           'bounce-slow': 'bounce 2s infinite',

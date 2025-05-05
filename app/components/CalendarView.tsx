@@ -5,7 +5,8 @@ type Task = {
   id: string;
   text: string;
   done: boolean;
-  tag: string;
+  tag?: string;
+  tags?: string[];
   createdAt: number;
   priority?: 'high' | 'medium' | 'low';
   status: 'pending' | 'completed' | 'archived';
@@ -15,9 +16,10 @@ type Task = {
 type CalendarViewProps = {
   tasks: Task[];
   onTaskClick: (taskId: string) => void;
+  darkMode?: boolean;
 };
 
-const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick, darkMode = false }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [calendar, setCalendar] = useState<Array<Array<Date>>>([]);
   
@@ -104,6 +106,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick }) => {
            date.getFullYear() === today.getFullYear();
   };
   
+  // Get the primary tag to display in calendar
+  const getPrimaryTag = (task: Task): string => {
+    if (task.tags && task.tags.length > 0) {
+      return task.tags[0];
+    }
+    
+    return task.tag || '';
+  };
+  
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 mb-4">
       <div className="flex justify-between items-center mb-4">
@@ -174,7 +185,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ tasks, onTaskClick }) => {
                               ${task.priority === 'high' ? 'border-l-2 border-red-500' : ''}
                               ${task.priority === 'medium' ? 'border-l-2 border-yellow-500' : ''}
                               ${task.priority === 'low' ? 'border-l-2 border-green-500' : ''}
-                              ${getTagColor(task.tag)}
+                              ${getTagColor(getPrimaryTag(task))}
                             `}
                           >
                             {task.text}

@@ -72,6 +72,12 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
         type: 'absolute'
       };
       
+      console.log('Adding absolute reminder:', {
+        dateString: `${reminderDate}T${reminderTime}`,
+        timestamp: dateTime.getTime(),
+        formattedTime: new Date(dateTime).toLocaleString()
+      });
+      
       onChange([...(reminders || []), newReminder]);
       
       // Reset form
@@ -90,11 +96,20 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
         type: 'relative'
       };
       
+      console.log('Adding relative reminder:', {
+        dueDate: new Date(dueDate).toLocaleString(),
+        hoursBeforeDue: relativeHours,
+        reminderTime: new Date(reminderTime).toLocaleString()
+      });
+      
       onChange([...(reminders || []), newReminder]);
       
       // Reset form
       setRelativeHours(24);
     }
+    
+    // Close popup after adding
+    setIsOpen(false);
   };
   
   const removeReminder = (id: string) => {
@@ -122,7 +137,7 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
   return (
     <div className={`relative ${className}`} ref={configRef}>
       <div 
-        className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 hover:text-gray-900"
+        className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
         onClick={() => setIsOpen(!isOpen)}
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -133,22 +148,26 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
             {reminders.length} reminder{reminders.length !== 1 ? 's' : ''}
           </span>
         ) : (
-          <span className="text-gray-500">Set reminder</span>
+          <span className="text-gray-500 dark:text-gray-400">Set reminder</span>
         )}
       </div>
       
       {isOpen && (
-        <div className="absolute z-10 mt-2 p-4 bg-white rounded-lg shadow-lg border border-gray-200 w-72">
+        <div className="absolute z-50 mt-2 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 w-72 max-w-[calc(100vw-2rem)] transform-gpu overflow-auto max-h-[400px]" style={{ 
+          left: 'auto', 
+          right: 0,
+          top: '100%'
+        }}>
           {reminders && reminders.length > 0 && (
             <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Current reminders</h3>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current reminders</h3>
               <ul className="space-y-2">
                 {reminders.map(reminder => (
-                  <li key={reminder.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-xs">
-                    <span className="text-gray-700">{formatReminder(reminder)}</span>
+                  <li key={reminder.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-700 rounded text-xs">
+                    <span className="text-gray-700 dark:text-gray-300">{formatReminder(reminder)}</span>
                     <button 
                       onClick={() => removeReminder(reminder.id)}
-                      className="text-gray-400 hover:text-red-500"
+                      className="text-gray-400 hover:text-red-500 dark:hover:text-red-400"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -191,29 +210,29 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
             {reminderType === 'absolute' ? (
               <div className="space-y-2">
                 <div>
-                  <label className="block text-xs text-gray-700 mb-1">Date</label>
+                  <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Date</label>
                   <input 
                     type="date"
                     value={reminderDate}
                     onChange={(e) => setReminderDate(e.target.value)}
                     min={getFormattedDate()}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-slate-700 dark:text-white"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-xs text-gray-700 mb-1">Time</label>
+                  <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Time</label>
                   <input 
                     type="time"
                     value={reminderTime}
                     onChange={(e) => setReminderTime(e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-slate-700 dark:text-white"
                   />
                 </div>
               </div>
             ) : (
               <div>
-                <label className="block text-xs text-gray-700 mb-1">
+                <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">
                   Remind me before due date
                 </label>
                 <div className="flex items-center">
@@ -227,9 +246,9 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
                       }
                     }}
                     min="1"
-                    className="w-16 px-2 py-1 text-xs border border-gray-300 rounded"
+                    className="w-16 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-slate-700 dark:text-white"
                   />
-                  <span className="ml-2 text-xs text-gray-500">hours</span>
+                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">hours</span>
                 </div>
               </div>
             )}

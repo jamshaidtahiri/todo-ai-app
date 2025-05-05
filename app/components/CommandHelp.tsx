@@ -119,6 +119,16 @@ export default function CommandHelp({ onClose, onSelectCommand }: CommandHelpPro
         { command: 'calendar', description: 'Toggle calendar view' },
       ]
     },
+    {
+      category: 'Natural Language Examples',
+      items: [
+        { command: 'Buy groceries tomorrow at 10am', description: 'Creates task with due date & time' },
+        { command: 'Remind me to call mom at 5pm #family !high', description: 'Creates high priority task with tag' },
+        { command: 'I need to finish report by Friday evening', description: 'Creates task with Friday due date' },
+        { command: 'Take medicine every morning at 8am', description: 'Creates recurring daily task' },
+        { command: 'Play basketball on Saturday #fitness', description: 'Creates task with tag for Saturday' },
+      ]
+    },
   ];
   
   return (

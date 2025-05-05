@@ -1,7 +1,11 @@
 {
     "dependencies": {
+        "ai": "^4.3.13",
+        "axios": "^1.9.0",
+        "chrono-node": "^2.8.0",
         "cohere-ai": "^7.17.1",
         "download": "^8.0.0",
+        "framer-motion": "^12.9.7",
         "next": "^15.3.1",
         "react": "^19.1.0",
         "react-dom": "^19.1.0",

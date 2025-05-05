@@ -6,6 +6,7 @@ export type CommandInputProps = {
   onSubmit: (value: string) => void;
   isLoading: boolean;
   placeholder?: string;
+  useNaturalLanguage?: boolean;
 };
 
 export default function CommandInput({
@@ -13,13 +14,16 @@ export default function CommandInput({
   onChange,
   onSubmit,
   isLoading,
-  placeholder = "Type a command (e.g., add buy milk #errand)"
+  placeholder = "Type a command (e.g., add buy milk #errand)",
+  useNaturalLanguage = true
 }: CommandInputProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isLoading) {
       onSubmit(value);
     }
   };
+
+  const naturalLanguagePlaceholder = "Try natural language: 'Call mom tomorrow at 5pm #family !high'";
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 mb-6 transition-all duration-300 transform hover:shadow-xl">
@@ -33,7 +37,7 @@ export default function CommandInput({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             className="w-full bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 p-4 pl-8 pr-16 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all dark:text-white"
-            placeholder={placeholder}
+            placeholder={useNaturalLanguage ? naturalLanguagePlaceholder : placeholder}
             disabled={isLoading}
           />
           {isLoading && (
@@ -58,6 +62,11 @@ export default function CommandInput({
             Help
           </button>
         </div>
+        {useNaturalLanguage && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-1">
+            Now with natural language understanding! Try typing full sentences like "Remind me to call mom tomorrow at 5pm"
+          </div>
+        )}
       </div>
     </div>
   );

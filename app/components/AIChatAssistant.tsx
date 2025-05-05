@@ -6,7 +6,8 @@ type Task = {
   id: string;
   text: string;
   done: boolean;
-  tag: string;
+  tag?: string;
+  tags?: string[];
   createdAt: number;
   priority?: 'high' | 'medium' | 'low';
   status: 'pending' | 'completed' | 'archived';

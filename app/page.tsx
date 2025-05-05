@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { classifyTask, classifyCommand, generateTaskSuggestions } from './utils/cohere';
+import { parseTaskWithLLM, ParsedTask } from './utils/huggingface';
 import { v4 as uuidv4 } from 'uuid';
 import Task from './components/Task';
 import CommandInput from './components/CommandInput';
@@ -12,12 +13,23 @@ import BatchActions from './components/BatchActions';
 import { filterAndSortTasks, parseCommand, CommandResult } from './utils/helpers';
 import CalendarView from './components/CalendarView';
 import AIChatAssistant from './components/AIChatAssistant';
+import TabSystem from './components/TabSystem';
+import TabDialog from './components/TabDialog';
+import { useTheme } from './utils/theme';
+import { useReminderCheck } from './utils/useReminderCheck';
+
+type TaskCategory = {
+  id: string;
+  name: string;
+  color: string;
+};
 
 type Task = {
   id: string;
   text: string;
   done: boolean;
-  tag: string;
+  tag?: string;  // Keep for backward compatibility
+  tags?: string[]; // New field for multiple tags
   createdAt: number;
   priority?: 'high' | 'medium' | 'low';
   status: 'pending' | 'completed' | 'archived';
@@ -41,7 +53,13 @@ type Task = {
     type: 'absolute' | 'relative'; // absolute time or relative to due date
   }[];
   project?: string; // For grouping tasks by project
+  category?: string; // For categorizing tasks (Personal, Work, etc.)
 };
+
+// Update the CommandResult interface to include isCommand property
+interface ExtendedCommandResult extends CommandResult {
+  isCommand?: boolean;
+}
 
 export default function Home() {
   const [input, setInput] = useState('');
@@ -59,6 +77,12 @@ export default function Home() {
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [showCalendarView, setShowCalendarView] = useState(false);
   const [showChatAssistant, setShowChatAssistant] = useState(false);
+  
+  // New state for categories
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('tasks');
@@ -72,6 +96,10 @@ export default function Home() {
     
     const storedSortCriteria = localStorage.getItem('sortCriteria');
     if (storedSortCriteria) setSortCriteria(storedSortCriteria as any);
+    
+    // Load categories
+    const storedCategories = localStorage.getItem('categories');
+    if (storedCategories) setCategories(JSON.parse(storedCategories));
   }, []);
 
   useEffect(() => {
@@ -79,6 +107,7 @@ export default function Home() {
     localStorage.setItem('projects', JSON.stringify(projects));
     localStorage.setItem('darkMode', darkMode.toString());
     localStorage.setItem('sortCriteria', sortCriteria);
+    localStorage.setItem('categories', JSON.stringify(categories));
     
     setStats({
       total: tasks.length,
@@ -96,7 +125,7 @@ export default function Home() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [tasks, projects, darkMode, sortCriteria]);
+  }, [tasks, projects, darkMode, sortCriteria, categories]);
 
   useEffect(() => {
     // Handle showing help when input is "help"
@@ -143,18 +172,22 @@ export default function Home() {
       time: number;
       notified: boolean;
       type: 'absolute' | 'relative';
-    }[]
+    }[],
+    providedTags?: string[] // New parameter for multiple tags
   ) => {
     if (!text.trim()) return;
     setIsLoading(true);
     try {
-      // If a tag is provided, use it. Otherwise, classify with AI
+      // If tags are provided, use them. Otherwise, classify with AI or use the single tag
       const tag = providedTag || await classifyTask(text);
+      const tags = providedTags || (providedTag ? [providedTag] : tag ? [tag] : []);
+      
       setTasks([...tasks, { 
         id: uuidv4(), 
         text, 
         done: false, 
-        tag,
+        tag,  // Keep for backward compatibility
+        tags, // Add multiple tags
         createdAt: Date.now(),
         priority,
         status: 'pending',
@@ -162,6 +195,7 @@ export default function Home() {
         notes,
         subtasks,
         project,
+        category: activeCategory, // Assign the active category if any
         recurring,
         reminders
       }]);
@@ -383,44 +417,10 @@ export default function Home() {
     }
   }, [tasks]);
   
-  // Check for due reminders
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const now = Date.now();
-    let tasksUpdated = false;
-    
-    const updatedTasks = tasks.map(task => {
-      if (task.reminders && task.reminders.length > 0) {
-        const updatedReminders = task.reminders.map(reminder => {
-          if (!reminder.notified && reminder.time <= now) {
-            // Show notification
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification('Task Reminder', {
-                body: `Reminder for: ${task.text}`,
-                icon: '/icon.png'
-              });
-            }
-            
-            return { ...reminder, notified: true };
-          }
-          return reminder;
-        });
-        
-        if (JSON.stringify(updatedReminders) !== JSON.stringify(task.reminders)) {
-          tasksUpdated = true;
-          return { ...task, reminders: updatedReminders };
-        }
-      }
-      return task;
-    });
-    
-    if (tasksUpdated) {
-      setTasks(updatedTasks);
-    }
-  }, [tasks]);
+  // Use the custom hook for reminder checking
+  useReminderCheck(tasks, setTasks);
   
-  // Request notification permissions
+  // Request notification permissions (keep this or remove if it's handled in the hook)
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
@@ -526,35 +526,66 @@ export default function Home() {
     
     if (result.type === 'unknown' && commandText.trim()) {
       setIsLoading(true);
+      
       try {
-        // Use LLM-based classification
-        const llmClassification = await classifyCommand(commandText);
+        // Try first with the Hugging Face natural language parser
+        const parsedTask = await parseTaskWithLLM(commandText);
         
-        if (llmClassification.intent === 'add_task') {
+        if (parsedTask && parsedTask.title) {
+          // Successfully parsed the task with natural language understanding
+          const dueDate = parsedTask.due ? parsedTask.due.getTime() : undefined;
+          
           addTask(
-            llmClassification.entities.taskText || commandText,
-            llmClassification.entities.tag,
-            llmClassification.entities.priority as 'high' | 'medium' | 'low' | undefined
+            parsedTask.title,
+            undefined, // Don't provide a single tag
+            parsedTask.priority,
+            dueDate,
+            undefined, // notes
+            undefined, // subtasks
+            undefined, // project
+            undefined, // recurring
+            undefined, // reminders
+            parsedTask.tags // Pass the tags array
           );
-        } else if (llmClassification.intent === 'complete_task' && llmClassification.entities.searchTerm) {
-          tickTasksByText(llmClassification.entities.searchTerm);
-        } else if (llmClassification.intent === 'delete_task' && llmClassification.entities.searchTerm) {
-          deleteTasksByText(llmClassification.entities.searchTerm);
-        } else if (llmClassification.intent === 'change_tag' && llmClassification.entities.searchTerm && llmClassification.entities.tag) {
-          updateTaskTag(llmClassification.entities.searchTerm, llmClassification.entities.tag);
-        } else if (llmClassification.intent === 'set_priority' && llmClassification.entities.searchTerm && llmClassification.entities.priority) {
-          updateTaskPriority(
-            llmClassification.entities.searchTerm, 
-            llmClassification.entities.priority as 'high' | 'medium' | 'low'
-          );
-        } else if (llmClassification.intent === 'filter_tasks' && llmClassification.entities.tag) {
-          setFilterTag(llmClassification.entities.tag);
-        } else {
-          // If LLM can't classify it either, default to adding a task
+          setIsLoading(false);
+          return;
+        }
+        
+        // Fallback to Cohere classification if Hugging Face failed
+        try {
+          // Use LLM-based classification
+          const llmClassification = await classifyCommand(commandText);
+          
+          if (llmClassification.intent === 'add_task') {
+            addTask(
+              llmClassification.entities.taskText || commandText,
+              llmClassification.entities.tag,
+              llmClassification.entities.priority as 'high' | 'medium' | 'low' | undefined
+            );
+          } else if (llmClassification.intent === 'complete_task' && llmClassification.entities.searchTerm) {
+            tickTasksByText(llmClassification.entities.searchTerm);
+          } else if (llmClassification.intent === 'delete_task' && llmClassification.entities.searchTerm) {
+            deleteTasksByText(llmClassification.entities.searchTerm);
+          } else if (llmClassification.intent === 'change_tag' && llmClassification.entities.searchTerm && llmClassification.entities.tag) {
+            updateTaskTag(llmClassification.entities.searchTerm, llmClassification.entities.tag);
+          } else if (llmClassification.intent === 'set_priority' && llmClassification.entities.searchTerm && llmClassification.entities.priority) {
+            updateTaskPriority(
+              llmClassification.entities.searchTerm, 
+              llmClassification.entities.priority as 'high' | 'medium' | 'low'
+            );
+          } else if (llmClassification.intent === 'filter_tasks' && llmClassification.entities.tag) {
+            setFilterTag(llmClassification.entities.tag);
+          } else {
+            // If LLM can't classify it either, default to adding a task
+            addTask(commandText);
+          }
+        } catch (error) {
+          console.error('Error processing command with Cohere:', error);
+          // Default to adding a task
           addTask(commandText);
         }
       } catch (error) {
-        console.error('Error processing command with LLM:', error);
+        console.error('Error processing with natural language:', error);
         // Default to adding a task
         addTask(commandText);
       } finally {
@@ -631,8 +662,84 @@ export default function Home() {
   };
 
   // Get filtered and sorted tasks
-  const filteredTasks = filterAndSortTasks(tasks, filterTag);
-  
+  const getFilteredTasks = () => {
+    // First, filter by category if one is selected
+    let filteredTasks = [...tasks] as typeof tasks;
+    
+    // Apply category filter
+    if (activeCategory !== null) {
+      filteredTasks = filteredTasks.filter(t => t.category === activeCategory);
+    }
+    
+    // Apply tag filter if one is selected
+    if (filterTag !== null) {
+      filteredTasks = filteredTasks.filter(t => {
+        // Check in both the old tag field and the new tags array
+        return t.tag === filterTag || (t.tags && t.tags.includes(filterTag));
+      });
+    }
+    
+    // Apply project filter if one is selected
+    if (activeProject !== null) {
+      filteredTasks = filteredTasks.filter(t => t.project === activeProject);
+    }
+    
+    // Sort by the selected criteria
+    switch (sortCriteria) {
+      case 'priority':
+        filteredTasks = filteredTasks.sort((a, b) => {
+          // Sort completed tasks to the bottom
+          if (a.done !== b.done) return a.done ? 1 : -1;
+          
+          // Sort by priority if present
+          if (a.priority && b.priority && a.priority !== b.priority) {
+            const priorityValues = { high: 0, medium: 1, low: 2 };
+            return priorityValues[a.priority] - priorityValues[b.priority];
+          }
+          
+          // Then sort by creation date (newest first)
+          return b.createdAt - a.createdAt;
+        });
+        break;
+      case 'dueDate':
+        filteredTasks = filteredTasks.sort((a, b) => {
+          // Sort completed tasks to the bottom
+          if (a.done !== b.done) return a.done ? 1 : -1;
+          
+          // Sort tasks with due dates first, then by due date (soonest first)
+          const aHasDue = a.dueDate !== undefined;
+          const bHasDue = b.dueDate !== undefined;
+          
+          if (aHasDue !== bHasDue) return aHasDue ? -1 : 1;
+          if (aHasDue && bHasDue) return (a.dueDate || 0) - (b.dueDate || 0);
+          
+          // Then sort by creation date (newest first)
+          return b.createdAt - a.createdAt;
+        });
+        break;
+      case 'alphabetical':
+        filteredTasks = filteredTasks.sort((a, b) => {
+          // Sort completed tasks to the bottom
+          if (a.done !== b.done) return a.done ? 1 : -1;
+          
+          // Sort by title alphabetically
+          return a.text.localeCompare(b.text);
+        });
+        break;
+      case 'createdAt':
+      default:
+        filteredTasks = filteredTasks.sort((a, b) => {
+          // Sort completed tasks to the bottom
+          if (a.done !== b.done) return a.done ? 1 : -1;
+          
+          // Sort by creation date (newest first)
+          return b.createdAt - a.createdAt;
+        });
+    }
+    
+    return filteredTasks;
+  };
+
   // Handle task click from calendar
   const handleTaskClick = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
@@ -642,45 +749,175 @@ export default function Home() {
     }
   };
 
+  // Category management functions
+  const handleCategoryChange = (categoryId: string | null) => {
+    setActiveCategory(categoryId);
+  };
+  
+  const handleAddCategory = () => {
+    setEditingCategory(null);
+    setShowCategoryDialog(true);
+  };
+  
+  const handleEditCategory = (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId);
+    if (category) {
+      setEditingCategory(category);
+      setShowCategoryDialog(true);
+    }
+  };
+  
+  const handleDeleteCategory = (categoryId: string) => {
+    if (confirm('Are you sure you want to delete this category? Tasks will not be deleted, but will be uncategorized.')) {
+      // Remove the category from tasks
+      setTasks(tasks.map(task => 
+        task.category === categoryId ? { ...task, category: undefined } : task
+      ));
+      
+      // Remove the category
+      setCategories(categories.filter(c => c.id !== categoryId));
+      
+      if (activeCategory === categoryId) {
+        setActiveCategory(null);
+      }
+      
+      showFeedback('Category deleted');
+    }
+  };
+  
+  const handleSaveCategory = (name: string, color: string) => {
+    if (editingCategory) {
+      // Update existing category
+      setCategories(categories.map(c => 
+        c.id === editingCategory.id ? { ...c, name, color } : c
+      ));
+      showFeedback('Category updated');
+    } else {
+      // Add new category
+      const newCategory = {
+        id: uuidv4(),
+        name,
+        color
+      };
+      setCategories([...categories, newCategory]);
+      showFeedback('Category added');
+    }
+  };
+
+  // Function to handle task loading/refresh
+  useEffect(() => {
+    // Filter and sort tasks based on criteria
+    const filteredTasks = getFilteredTasks();
+    
+    // ... existing code ...
+  }, [activeCategory, activeProject, filterTag, sortCriteria, tasks]);
+
   return (
-    <div className={`min-h-screen p-4 ${darkMode ? 'dark bg-slate-900' : 'bg-gray-50'}`}>
+    <main className={`min-h-screen ${darkMode ? 'dark bg-slate-900' : 'bg-gray-50'}`}>
+      {feedbackMessage && (
+        <div className="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in-out">
+          {feedbackMessage}
+        </div>
+      )}
+      
       <div className="max-w-4xl mx-auto">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">AI-Powered Todo</h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">Organize your tasks with AI assistance</p>
-        </header>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">
+            AI-Powered Todo App
+          </h1>
+          <div className="flex space-x-2">
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
+            
+            <button 
+              onClick={() => setShowCalendarView(!showCalendarView)}
+              className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${showCalendarView ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
+              aria-label="Toggle calendar view"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+            
+            <button 
+              onClick={() => setShowChatAssistant(!showChatAssistant)}
+              className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${showChatAssistant ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
+              aria-label="Toggle AI assistant"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        {/* Tab System for Categories */}
+        <TabSystem
+          tabs={categories}
+          activeTab={activeCategory}
+          onTabChange={handleCategoryChange}
+          onAddTab={handleAddCategory}
+          onEditTab={handleEditCategory}
+          onDeleteTab={handleDeleteCategory}
+        />
         
         <div className="mb-6">
-          <CommandInput 
-            value={input} 
+          <CommandInput
+            value={input}
             onChange={setInput}
-            onSubmit={processCommand}
+            onSubmit={async () => {
+              const trimmed = input.trim();
+              if (trimmed) {
+                const result = parseCommand(trimmed) as ExtendedCommandResult;
+                if (result.type !== 'unknown') {
+                  result.isCommand = true;
+                  await processCommand(trimmed);
+                } else {
+                  // Try to parse natural language with LLM
+                  setIsLoading(true);
+                  try {
+                    const parsed = await parseTaskWithLLM(trimmed);
+                    if (parsed) {
+                      addTask(
+                        parsed.title, 
+                        undefined, // Don't provide a single tag
+                        parsed.priority,
+                        parsed.due ? parsed.due.getTime() : undefined,
+                        undefined, // notes
+                        undefined, // subtasks
+                        undefined, // project
+                        undefined, // recurring
+                        undefined, // reminders
+                        parsed.tags // Pass the tags array
+                      );
+                    } else {
+                      addTask(trimmed);
+                    }
+                  } catch (error) {
+                    console.error("Error parsing task:", error);
+                    addTask(trimmed);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }
+              }
+            }}
             isLoading={isLoading}
-            placeholder="Add a task or type a command (try 'help' for options)..."
+            placeholder="Add a task or enter a command (try 'help')"
           />
-          
-          {feedbackMessage && (
-            <div className="mt-2 p-2 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-md text-sm">
-              {feedbackMessage}
-            </div>
-          )}
-          
-          {taskSuggestions.length > 0 && showSuggestions && (
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Suggested tasks:</h3>
-              <div className="space-y-2">
-                {taskSuggestions.map((suggestion, index) => (
-                  <button
-                    key={index}
-                    onClick={() => addTask(suggestion)}
-                    className="block w-full text-left px-3 py-2 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 text-sm"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
         
         <div className="flex items-center justify-between mb-4">
@@ -754,32 +991,41 @@ export default function Home() {
           darkMode={darkMode}
         />
         
-        {showCalendarView && (
-          <div className="mb-6">
-            <CalendarView tasks={tasks} onTaskClick={handleTaskClick} />
-          </div>
+        {showCalendarView ? (
+          <CalendarView 
+            tasks={getFilteredTasks() as any} 
+            onTaskClick={handleTaskClick}
+            darkMode={darkMode}
+          />
+        ) : (
+          <ul className="space-y-4 mt-4">
+            {(getFilteredTasks() as any).map((task: any) => (
+              <Task
+                key={task.id}
+                task={task}
+                onToggle={toggleTask}
+                onDelete={deleteTask}
+                onUpdate={handleTaskUpdate}
+                darkMode={darkMode}
+                categories={categories}
+              />
+            ))}
+            {getFilteredTasks().length === 0 && (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                {isLoading ? (
+                  <div>Loading tasks...</div>
+                ) : (
+                  <div>
+                    <p className="mb-2">No tasks found.</p>
+                    <p className="text-sm">Try adding a new task using the input box above.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </ul>
         )}
         
         <ProgressBar completed={stats.completed} total={stats.total} />
-        
-        <div className="mt-4 space-y-2">
-          {filteredTasks.map(task => (
-            <Task
-              key={task.id}
-              task={task}
-              onToggle={() => toggleTask(task.id)}
-              onDelete={() => deleteTask(task.id)}
-              onUpdate={(updates) => handleTaskUpdate(task.id, updates)}
-              darkMode={darkMode}
-            />
-          ))}
-          
-          {filteredTasks.length === 0 && (
-            <div className="p-4 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-800 rounded-lg shadow">
-              No tasks found. {filterTag ? `Try removing the "${filterTag}" filter or add` : 'Add'} some tasks to get started!
-            </div>
-          )}
-        </div>
         
         {showHelp && (
           <CommandHelp onClose={() => setShowHelp(false)} />
@@ -787,12 +1033,23 @@ export default function Home() {
         
         {showChatAssistant && (
           <AIChatAssistant 
-            tasks={tasks} 
+            tasks={tasks as any} 
             isOpen={showChatAssistant} 
             onClose={() => setShowChatAssistant(false)} 
           />
         )}
       </div>
-    </div>
+      
+      {/* Category Dialog */}
+      <TabDialog
+        isOpen={showCategoryDialog}
+        onClose={() => setShowCategoryDialog(false)}
+        onSave={handleSaveCategory}
+        editingTab={editingCategory ? { 
+          name: editingCategory.name, 
+          color: editingCategory.color 
+        } : undefined}
+      />
+    </main>
   );
 }

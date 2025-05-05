@@ -46,7 +46,10 @@ export function formatRelativeTime(timestamp: number): string {
 export function filterAndSortTasks(tasks: any[], filterTag: string | null): any[] {
   // First filter by tag if necessary
   const filteredTasks = filterTag 
-    ? tasks.filter(t => t.tag === filterTag)
+    ? tasks.filter(t => {
+        // Check both the old tag field and the new tags array
+        return t.tag === filterTag || (t.tags && t.tags.includes(filterTag));
+      })
     : tasks;
   
   // Then sort: completed tasks at bottom, newest first

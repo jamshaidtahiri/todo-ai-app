@@ -6,7 +6,8 @@ type Task = {
   id: string;
   text: string;
   done: boolean;
-  tag: string;
+  tag?: string;  // Make tag optional
+  tags?: string[]; // Add tags array
   createdAt: number;
   priority?: 'high' | 'medium' | 'low';
   status: 'pending' | 'completed' | 'archived';
@@ -142,7 +143,7 @@ export function suggestOptimalTime(
   } = {}
 ): number {
   const now = new Date();
-  const taskTag = task.tag.toLowerCase();
+  const taskTag = task.tag?.toLowerCase() || '';
   
   // Default working hours (9 AM to 6 PM)
   const workStart = userPreferences.workingHours?.start || 9;
