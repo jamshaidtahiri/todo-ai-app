@@ -7,9 +7,10 @@ type SubtaskProps = {
   taskId: string; // Parent task ID
   onToggle: (taskId: string, subtaskId: string) => void;
   onDelete: (taskId: string, subtaskId: string) => void;
+  darkMode?: boolean;
 };
 
-export default function Subtask({ id, text, done, taskId, onToggle, onDelete }: SubtaskProps) {
+export default function Subtask({ id, text, done, taskId, onToggle, onDelete, darkMode = false }: SubtaskProps) {
   const [isHovering, setIsHovering] = useState(false);
   
   return (
@@ -34,13 +35,13 @@ export default function Subtask({ id, text, done, taskId, onToggle, onDelete }: 
         </span>
       </div>
       
-      <span className={`flex-1 ${done ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+      <span className={`flex-1 ${done ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>
         {text}
       </span>
       
       <button 
         onClick={() => onDelete(taskId, id)}
-        className={`text-gray-400 hover:text-red-500 transition-colors ${isHovering ? 'opacity-100' : 'opacity-0'}`}
+        className={`text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors ${isHovering ? 'opacity-100' : 'opacity-0'}`}
         aria-label="Delete subtask"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

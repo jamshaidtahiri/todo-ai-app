@@ -152,38 +152,36 @@ const AnimatedSearchBar: React.FC<{
         </svg>
       </motion.button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.form
-            onSubmit={onSubmit}
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: 200 }}
-            exit={{ opacity: 0, width: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute right-10 top-0 origin-right"
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="Search tasks..."
-              className="w-full h-10 pl-3 pr-8 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            {value && (
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                className="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </motion.form>
-        )}
-      </AnimatePresence>
+      {isOpen && (
+        <motion.form
+          onSubmit={onSubmit}
+          initial={{ opacity: 0, width: 0 }}
+          animate={{ opacity: 1, width: 200 }}
+          exit={{ opacity: 0, width: 0 }}
+          transition={{ duration: 0.2 }}
+          className="absolute right-10 top-0 origin-right"
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search tasks..."
+            className="w-full h-10 pl-3 pr-8 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </motion.form>
+      )}
     </div>
   );
 }; 

@@ -295,6 +295,9 @@ function clientSideParseTask(text: string): ParsedTask | null {
     let reminderDate: Date | null = null;
     let actualTaskTitle: string | null = null;
     
+    // Define a list of religious terms that shouldn't be treated as tags
+    const religiousTerms = ["namaz", "prayer", "salah", "salat", "jummah", "dhuhr", "asr", "maghrib", "isha", "fajr"];
+    
     // Enhanced reminder patterns with better task extraction
     const reminderPatterns = [
       // Match "remind/reminder me tomorrow of X" pattern
@@ -416,18 +419,31 @@ function clientSideParseTask(text: string): ParsedTask | null {
       console.log(`📝 Using default title: "${actualTaskTitle}"`);
     }
     
-    // If input specifically includes "namaz at 5am", extract "namaz" as task
-    if (origDateText.toLowerCase().includes("namaz")) {
-      if (actualTaskTitle.toLowerCase().includes("namaz at")) {
-        actualTaskTitle = "Namaz";
-      } else if (actualTaskTitle.toLowerCase().includes("of namaz")) {
-        actualTaskTitle = "Namaz";
+    // Special handling for religious terms
+    let finalTitle = actualTaskTitle;
+    for (const term of religiousTerms) {
+      if (origDateText.toLowerCase().includes(term.toLowerCase())) {
+        // If input contains religious terms, ensure they stay in the title and are not extracted as tags
+        const regex = new RegExp(`(.*?\\b${term}\\b.*?)(?:\\s*at\\s*|\\s*on\\s*|\\s*$)`, 'i');
+        const match = origDateText.match(regex);
+        
+        if (match && match[1]) {
+          // Extract the part containing the religious term
+          finalTitle = match[1].trim();
+          
+          // If the title is just the reminder prefix plus the term, format it nicely
+          if (finalTitle.match(/^remind(?:er)?\s+(?:me|us)?\s+(?:to|of|about)?\s+/i)) {
+            finalTitle = term.charAt(0).toUpperCase() + term.slice(1);
+          }
+          
+          console.log(`📝 Extracted religious term '${term}': "${finalTitle}"`);
+          break;
+        }
       }
-      console.log(`📝 Extracted specific 'namaz' task: "${actualTaskTitle}"`);
     }
     
     // Capitalize first letter of the final title
-    const finalTitle = actualTaskTitle.charAt(0).toUpperCase() + actualTaskTitle.slice(1);
+    finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
     
     // Construct and return the parsed task
     return {

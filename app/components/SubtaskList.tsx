@@ -15,9 +15,10 @@ type SubtaskListProps = {
     done: boolean;
   }[] | undefined) => void;
   className?: string;
+  darkMode?: boolean;
 };
 
-export default function SubtaskList({ taskId, subtasks, onChange, className = '' }: SubtaskListProps) {
+export default function SubtaskList({ taskId, subtasks, onChange, className = '', darkMode = false }: SubtaskListProps) {
   const [newSubtaskText, setNewSubtaskText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   
@@ -75,6 +76,7 @@ export default function SubtaskList({ taskId, subtasks, onChange, className = ''
               taskId={taskId}
               onToggle={handleToggleSubtask}
               onDelete={handleDeleteSubtask}
+              darkMode={darkMode}
             />
           ))}
         </ul>
@@ -88,13 +90,13 @@ export default function SubtaskList({ taskId, subtasks, onChange, className = ''
             onChange={(e) => setNewSubtaskText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add a subtask..."
-            className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-slate-700 dark:text-white"
             autoFocus
           />
           <button
             onClick={addSubtask}
             disabled={!newSubtaskText.trim()}
-            className="text-xs px-2 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="text-xs px-2 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:text-gray-500 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
           >
             Add
           </button>
@@ -103,7 +105,7 @@ export default function SubtaskList({ taskId, subtasks, onChange, className = ''
               setIsAdding(false);
               setNewSubtaskText('');
             }}
-            className="text-xs px-2 py-1 text-gray-600 hover:text-gray-800"
+            className="text-xs px-2 py-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
           >
             Cancel
           </button>
@@ -111,7 +113,7 @@ export default function SubtaskList({ taskId, subtasks, onChange, className = ''
       ) : (
         <button
           onClick={() => setIsAdding(true)}
-          className="flex items-center text-xs text-gray-500 hover:text-gray-700 pl-6"
+          className="flex items-center text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 pl-6"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
