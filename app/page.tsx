@@ -521,6 +521,60 @@ export default function Home() {
   const processCommand = async (commandText: string) => {
     setInput(commandText);
     
+    // Check for reminder-specific patterns first
+    const reminderPattern = /remind(er)?\s+(me|us)?\s+(to|of|about)?/i;
+    if (reminderPattern.test(commandText.toLowerCase())) {
+      console.log("Detected reminder command:", commandText);
+      setIsLoading(true);
+      
+      try {
+        // First, parse the task with natural language understanding
+        const parsedTask = await parseTaskWithLLM(commandText);
+        
+        if (parsedTask && parsedTask.title) {
+          // Extract a reasonable task title
+          // Sometimes the reminder text is included in the title, try to clean it
+          let taskTitle = parsedTask.title;
+          taskTitle = taskTitle.replace(/^remind(er)?\s+(me|us)?\s+(to|of|about)?/i, '').trim();
+          if (!taskTitle) taskTitle = "Reminder";
+          
+          // Get the due date/time from the parsed task
+          const dueDate = parsedTask.due ? parsedTask.due.getTime() : undefined;
+          
+          // Create a reminder 5 minutes before the due date, or at the due date if nothing else specified
+          const reminderDate = dueDate ? dueDate - (5 * 60 * 1000) : undefined;
+          
+          // Prepare reminder object
+          const reminders = reminderDate ? [{
+            id: uuidv4(),
+            time: reminderDate,
+            notified: false,
+            type: 'absolute'
+          }] : undefined;
+          
+          // Create the task with the reminder
+          addTask(
+            taskTitle,
+            undefined, // Don't provide a single tag
+            parsedTask.priority,
+            dueDate,
+            undefined, // notes
+            undefined, // subtasks
+            undefined, // project
+            undefined, // recurring
+            reminders,
+            parsedTask.tags // Pass the tags array
+          );
+          setIsLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Error processing reminder:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
     // First try rule-based parsing
     const result = parseCommand(commandText);
     
@@ -535,6 +589,25 @@ export default function Home() {
           // Successfully parsed the task with natural language understanding
           const dueDate = parsedTask.due ? parsedTask.due.getTime() : undefined;
           
+          // Check if this task might need a reminder
+          const needsReminder = /remind|alert|notify|notification/i.test(commandText);
+          let reminders = undefined;
+          
+          if (needsReminder && dueDate) {
+            const reminderTime = dueDate - (30 * 60 * 1000); // 30 minutes before due date
+            reminders = [{
+              id: uuidv4(),
+              time: reminderTime,
+              notified: false,
+              type: 'absolute'
+            }];
+            console.log("Created reminder for task:", {
+              taskTitle: parsedTask.title,
+              dueDate: new Date(dueDate).toLocaleString(),
+              reminderTime: new Date(reminderTime).toLocaleString()
+            });
+          }
+          
           addTask(
             parsedTask.title,
             undefined, // Don't provide a single tag
@@ -544,7 +617,7 @@ export default function Home() {
             undefined, // subtasks
             undefined, // project
             undefined, // recurring
-            undefined, // reminders
+            reminders,
             parsedTask.tags // Pass the tags array
           );
           setIsLoading(false);

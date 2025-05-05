@@ -18,8 +18,8 @@ type ReminderConfigProps = {
 export default function ReminderConfig({ reminders, dueDate, onChange, className = '' }: ReminderConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [reminderType, setReminderType] = useState<'absolute' | 'relative'>('absolute');
-  const [reminderDate, setReminderDate] = useState('');
-  const [reminderTime, setReminderTime] = useState('');
+  const [reminderDate, setReminderDate] = useState(getFormattedDate());
+  const [reminderTime, setReminderTime] = useState(getFormattedTime());
   const [relativeHours, setRelativeHours] = useState(24); // Default 24 hours before due date
   
   const configRef = useRef<HTMLDivElement>(null);
@@ -38,10 +38,41 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
     };
   }, []);
   
+  // Format date for input
+  const getFormattedDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  // Format time for input (default to current time rounded to next 30 min)
+  const getFormattedTime = () => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = now.getMinutes() < 30 ? '30' : '00';
+    return `${hours}:${minutes}`;
+  };
+  
   const formatReminder = (reminder: Reminder): string => {
+    const now = new Date();
     const reminderDate = new Date(reminder.time);
     
+    // Check if reminder is in the past
+    const isPast = reminderDate < now;
+    
     if (reminder.type === 'absolute') {
+      // Format for past reminders
+      if (isPast && reminder.notified) {
+        return `Sent ${reminderDate.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit'
+        })}`;
+      }
+      
       return reminderDate.toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -53,6 +84,11 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
       if (!dueDate) return 'Invalid reminder';
       
       const hoursDiff = Math.round((dueDate - reminder.time) / (1000 * 60 * 60));
+      
+      if (isPast && reminder.notified) {
+        return `Sent ${hoursDiff} hour${hoursDiff !== 1 ? 's' : ''} before due date`;
+      }
+      
       return `${hoursDiff} hour${hoursDiff !== 1 ? 's' : ''} before due date`;
     }
   };
@@ -81,8 +117,8 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
       onChange([...(reminders || []), newReminder]);
       
       // Reset form
-      setReminderDate('');
-      setReminderTime('');
+      setReminderDate(getFormattedDate());
+      setReminderTime(getFormattedTime());
     } else {
       // Relative reminder
       if (!dueDate || relativeHours <= 0) return;
@@ -117,23 +153,6 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
     onChange(updatedReminders.length ? updatedReminders : undefined);
   };
   
-  // Format date for input
-  const getFormattedDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-  
-  // Format time for input (default to current time rounded to next 30 min)
-  const getFormattedTime = () => {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = now.getMinutes() < 30 ? '30' : '00';
-    return `${hours}:${minutes}`;
-  };
-  
   return (
     <div className={`relative ${className}`} ref={configRef}>
       <div 
@@ -146,6 +165,9 @@ export default function ReminderConfig({ reminders, dueDate, onChange, className
         {reminders && reminders.length > 0 ? (
           <span className="flex items-center">
             {reminders.length} reminder{reminders.length !== 1 ? 's' : ''}
+            {reminders.some(r => !r.notified && r.time <= Date.now()) && (
+              <span className="ml-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+            )}
           </span>
         ) : (
           <span className="text-gray-500 dark:text-gray-400">Set reminder</span>
